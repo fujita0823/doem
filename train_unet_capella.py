@@ -72,8 +72,10 @@ torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-outdir = "sample_weights"
+outdir = "results"
 os.makedirs(outdir, exist_ok=True)
+netout_dir = os.path.join(outdir, "trained")
+os.makedirs(netout_dir, exist_ok=True)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 print("Number of epochs   :", n_epochs)
@@ -276,8 +278,6 @@ if test_mode == True:
     header = ['city','bareland','grass','developped','road','tree','water','cropland','buildings','mIoU']
     body = []
 
-    netout_dir = os.path.join(outdir, "trained")
-    os.makedirs(netout_dir, exist_ok=True)
     network.load_state_dict(torch.load(os.path.join(netout_dir, f"{network_fout}.pth")))
     network.to(device).eval()
     
@@ -449,14 +449,31 @@ else:
         valid_hist.append(logs_valid)
 
         if args.wandb:
-            wandb.log(logs_train)
+            wb_logs = {}
+            wb_logs["train_loss"] = logs_train[criterion.name]
+            wb_logs["train_iou"] = logs_train[metric.name]
+            wb_logs["valid_loss"] = logs_valid[criterion.name]
+            wb_logs["valid_iou"] = logs_valid[metric.name]
+            wandb.log(wb_logs)
        
         score = logs_valid[metric.name]
+
+        if args.log_plt:
+            prog_dir = os.path.join(outdir, "progress")
+            source.utils.progress(
+                train_hist,
+                valid_hist,
+                criterion.name,
+                metric.name,
+                n_epochs,
+                outdir,
+                network_fout,
+            )
         
         if max_score < score or epoch == n_epochs-1:
             max_score = score
             #torch.save(network, os.path.join(outdir, f"{network_fout}.pth"))
-            torch.save(network.state_dict(), os.path.join(outdir, f"{network_fout}_epoch{epoch}.pth"))
+            torch.save(network.state_dict(), os.path.join(netout_dir, f"{network_fout}_epoch{epoch}.pth"))
             print("Model saved!")
 
         if args.log_plt and epoch % 20 == 0 and epoch != 0:

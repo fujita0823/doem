@@ -1,6 +1,6 @@
 import torch
 from tqdm import tqdm
-from utils import save_fig_outputs
+from .utils import save_fig_outputs
 
 
 class AverageMeter:
@@ -58,7 +58,7 @@ def train_epoch(
             loss.backward()
             optimizer.step()
 
-            if figlog_dir is not None:
+            if figlog_dir is not None and epoch % 10 == 0:
                 save_fig_outputs(outputs, figlog_dir, epoch=epoch)
 
             loss_meter.update(loss.cpu().detach().numpy(), n=n)

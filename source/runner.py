@@ -1,5 +1,6 @@
 import torch
 from tqdm import tqdm
+from utils import save_fig_outputs
 
 
 class AverageMeter:
@@ -35,6 +36,8 @@ def train_epoch(
     device="cpu",
     loss_meter=None,
     score_meter=None,
+    epoch=None,
+    figlog_dir=None,
 ):
 
     loss_meter = AverageMeter()
@@ -55,6 +58,9 @@ def train_epoch(
             loss.backward()
             optimizer.step()
 
+            if figlog_dir is not None:
+                save_fig_outputs(outputs, figlog_dir, epoch=epoch)
+
             loss_meter.update(loss.cpu().detach().numpy(), n=n)
             score_meter.update(metric(outputs, y).cpu().detach().numpy(), n=n)
 
@@ -70,6 +76,8 @@ def valid_epoch(
     metric=None,
     dataloader=None,
     device="cpu",
+    epoch=None,
+    figlog_dir=None,
 ):
 
     loss_meter = AverageMeter()
@@ -86,6 +94,9 @@ def valid_epoch(
             with torch.no_grad():
                 outputs = model.forward(x)
                 loss = criterion(outputs, y)
+
+            if figlog_dir is not None:
+                save_fig_outputs(outputs, figlog_dir, epoch=epoch)
 
             loss_meter.update(loss.cpu().detach().numpy(), n=n)
             score_meter.update(metric(outputs, y).cpu().detach().numpy(), n=n)

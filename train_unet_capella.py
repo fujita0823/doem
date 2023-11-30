@@ -31,6 +31,7 @@ parser.add_argument("--large_test",type=str,default=None)
 parser.add_argument("--wandb", action="store_true")
 parser.add_argument("--label_ver", type=int, default=1) # 1: first version, 2: revised version
 parser.add_argument("--log_plt", action="store_true")
+parser.add_argument("--log_fig", action="store_true")
 args = parser.parse_args()
 
 if args.wandb:
@@ -413,6 +414,13 @@ else:
         )
         score = logs_valid[metric.name]
 
+    if args.log_fig:
+        figlog_dir = os.path.join(outdir, "figlog", network_fout)
+        os.makedirs(os.path.join(outdir, "figlog"), exist_ok=True)
+        os.makedirs(figlog_dir, exist_ok=True)
+    else:
+        figlog_dir = None    
+
     for epoch in range(n_epochs):
         print(f"\nEpoch: {epoch + 1}")
 
@@ -423,6 +431,8 @@ else:
             metric=metric,
             dataloader=train_loader,
             device=device,
+            epoch=epoch,
+            figlog_dir=figlog_dir,
         )
 
         logs_valid = source.runner.valid_epoch(
@@ -431,6 +441,8 @@ else:
             metric=metric,
             dataloader=valid_loader,
             device=device,
+            epoch=epoch,
+            figlog_dir=figlog_dir,
         )
 
         train_hist.append(logs_train)

@@ -17,6 +17,7 @@ import cv2
 from PIL import Image
 import time
 import source.test_crop_function as tcf
+import wandb
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="../DEMO/capella-oem/")
@@ -27,8 +28,14 @@ parser.add_argument("--n_epochs", type=int, default=30)
 parser.add_argument("--test_mode", type=bool, default=False)
 parser.add_argument("--train_city", type=str, default='all')
 parser.add_argument("--large_test",type=str,default=None)
+parser.add_argument("--wandb", action="store_true")
 parser.add_argument("--label_ver", type=int, default=1) # 1: first version, 2: revised version
+parser.add_argument("--log_plt", action="store_true")
 args = parser.parse_args()
+
+if args.wandb:
+    wandb.init(project="capella-oem")
+    wandb.config.update(args)
 
 # -----------------------
 # --- Main parameters ---
@@ -45,7 +52,7 @@ test_mode = args.test_mode
 train_city = args.train_city
 large_test = args.large_test
 label_ver = args.label_ver
-
+date = "0000"
 
 # 1: bareland
 # 2: grass
@@ -174,7 +181,7 @@ for p in network.parameters():
     if p.requires_grad:
         params += p.numel()
 
-criterion = source.losses.CEWithLogitsLoss(weights=classes_wt)
+criterion = source.losses.CEWithLogitsLoss(weights=classes_wt, device=device)
 criterion_name = 'CE'
 metric = source.metrics.IoU2()
 optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
@@ -185,15 +192,11 @@ else:
 if train_city != 'all':
     network.load_state_dict(torch.load(os.path.join(outdir, f"{network_fout}_epoch{n_epochs-1}.pth")))
     network_fout = f"{network.name}_s{seed}_{criterion.name}_{train_city}"
+
+network_fout += "_s"+str(seed)
+network_fout += "_" + str(date)
 print("Model output name  :", network_fout)
 print("Number of parameters: ", params)
-
-if torch.cuda.device_count() > 1:
-    print("Number of GPUs :", torch.cuda.device_count())
-    network = torch.nn.DataParallel(network)
-    optimizer = torch.optim.Adam(
-        [dict(params=network.module.parameters(), lr=learning_rate)]
-    )
 
 # --------------------------
 #       visualization
@@ -432,16 +435,10 @@ else:
 
         train_hist.append(logs_train)
         valid_hist.append(logs_valid)
-        #source.utils.progress(
-        #    train_hist,
-        #    valid_hist,
-        #    criterion.name,
-        #    metric.name,
-        #    n_epochs,
-        #    outdir,
-        #    network_fout,
-        #)
 
+        if args.wandb:
+            wandb.log(logs_train)
+       
         score = logs_valid[metric.name]
         
         if max_score < score or epoch == n_epochs-1:
@@ -450,20 +447,12 @@ else:
             torch.save(network.state_dict(), os.path.join(outdir, f"{network_fout}_epoch{epoch}.pth"))
             print("Model saved!")
 
-    # do something
-    #if epoch % 20 == 0 and epoch != 0:
-    #    learning_rate *= 1e-1
-    #    optimizer.param_groups[0]["lr"] = learning_rate
-    #    print("Decrease decoder learning rate to {}".format(learning_rate))
+        if args.log_plt and epoch % 20 == 0 and epoch != 0:
+           learning_rate *= 1e-1
+           optimizer.param_groups[0]["lr"] = learning_rate
+           print("Decrease decoder learning rate to {}".format(learning_rate))
 
     print(f"Completed: {(time.time() - start)/60.0:.4f} min.")
 
-# check out performance on the test set
-#network.eval()
-
-#for n in range(len(testset)):
-#    sample = testset[n]
-#    x = sample["x"].to("cpu")
-#    y = sample["y"].to("cpu")
-#    x_tensor = torch.from_numpy(input).to(device).unsqueeze(0)
-#    output = output.squeeze()
+if args.wandb:
+    wandb.finish()

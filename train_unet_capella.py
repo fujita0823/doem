@@ -27,6 +27,7 @@ parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--n_epochs", type=int, default=30)
 parser.add_argument("--test_mode", type=bool, default=False)
 parser.add_argument("--train_city", type=str, default='all')
+parser.add_argument("--img_factor", type=float, default=1.0)
 parser.add_argument("--large_test",type=str,default=None)
 parser.add_argument("--wandb", action="store_true")
 parser.add_argument("--label_ver", type=int, default=1) # 1: first version, 2: revised version
@@ -156,9 +157,9 @@ else:
 # ---------------------------
 # --- Define data loaders ---
 # ---------------------------
-trainset = source.dataset.Dataset(train_pths, classes=classes, size=512, train=True)
-validset = source.dataset.Dataset(val_pths, classes=classes, train=False)
-testset = source.dataset.Dataset(test_pths, classes=classes, train=False)
+trainset = source.dataset.Dataset(train_pths, classes=classes, size=512, train=True, factor=args.img_factor)
+validset = source.dataset.Dataset(val_pths, classes=classes, train=False, factor=args.img_factor)
+testset = source.dataset.Dataset(test_pths, classes=classes, train=False, factor=args.img_factor)
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=0)
 if train_city != 'all':

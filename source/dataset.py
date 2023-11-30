@@ -5,14 +5,16 @@ from torch.utils.data import Dataset as BaseDataset
 from . import transforms as T
 
 
-def load_multiband(path):
+def load_multiband(path, factor=1.0):
     src = rasterio.open(path, "r")
-    return (np.moveaxis(src.read(), 0, -1)).astype(np.uint8)
+    out_shape = (src.count, int(src.height*factor), int(src.width*factor))
+    return (np.moveaxis(src.read(out_shape=out_shape), 0, -1)).astype(np.uint8)
 
 
-def load_grayscale(path):
+def load_grayscale(path, factor=1.0):
     src = rasterio.open(path, "r")
-    return (src.read(1)).astype(np.uint8)
+    out_shape = (src.count, int(src.height*factor), int(src.width*factor))
+    return (src.read(1, out_shape=out_shape)).astype(np.uint8)
 
 def get_crs(path):
     src = rasterio.open(path, "r")
@@ -35,7 +37,7 @@ def save_img(path,img,crs,transform):
 
 
 class Dataset(BaseDataset):
-    def __init__(self, label_list, classes=None, size=128, train=False):
+    def __init__(self, label_list, classes=None, size=128, train=False, factor=1.0):
         self.fns = label_list
         self.augm = T.train_augm3 if train else T.valid_augm
         self.size = size
@@ -43,10 +45,11 @@ class Dataset(BaseDataset):
         self.to_tensor = T.ToTensor(classes=classes)
         self.load_multiband = load_multiband
         self.load_grayscale = load_grayscale
+        self.factor = factor
 
     def __getitem__(self, idx):
-        img = self.load_multiband(self.fns[idx].replace("labels", "images"))
-        msk = self.load_grayscale(self.fns[idx])
+        img = self.load_multiband(self.fns[idx].replace("labels", "images"), factor=self.factor)
+        msk = self.load_grayscale(self.fns[idx], factor=self.factor)
 
         if img.shape[-1] == 1:
             img = np.repeat(img, 3, axis=-1)

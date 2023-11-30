@@ -19,7 +19,7 @@ import time
 import source.test_crop_function as tcf
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", type=str, default="capella-oem")
+parser.add_argument("--dataset", type=str, default="../DEMO/capella-oem/")
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--batch_size", type=int, default=4)
@@ -66,8 +66,7 @@ torch.backends.cudnn.benchmark = False
 
 outdir = "sample_weights"
 os.makedirs(outdir, exist_ok=True)
-#device = "cuda" if torch.cuda.is_available() else "cpu"
-device = "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 print("Number of epochs   :", n_epochs)
 print("Number of classes  :", n_classes)
@@ -89,9 +88,9 @@ for city in cities:
 train_fns = []
 val_fns = []
 test_fns = []
-train_fns_txt = "capella-oem/train_capella.txt"
-val_fns_txt = "capella-oem/val_capella.txt"
-test_fns_txt = "capella-oem/test_capella.txt"
+train_fns_txt = os.path.join(args.dataset,"train_capella.txt")
+val_fns_txt = os.path.join(args.dataset,"val_capella.txt")
+test_fns_txt = os.path.join(args.dataset,"test_capella.txt")
 
 
 # read txt files

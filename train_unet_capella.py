@@ -15,6 +15,7 @@ import torchvision.transforms.functional as TF
 import math
 import cv2
 from PIL import Image
+from tqdm import tqdm
 import time
 import source.test_crop_function as tcf
 import wandb
@@ -25,7 +26,7 @@ parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--n_epochs", type=int, default=30)
-parser.add_argument("--test_mode", type=bool, default=False)
+parser.add_argument("--test_mode", action="store_true")
 parser.add_argument("--train_city", type=str, default='all')
 parser.add_argument("--img_factor", type=float, default=1.0)
 parser.add_argument("--large_test",type=str,default=None)
@@ -291,7 +292,25 @@ if test_mode == True:
     header = ['city','bareland','grass','developped','road','tree','water','cropland','buildings','mIoU']
     body = []
 
-    network.load_state_dict(torch.load(os.path.join(netout_dir, f"{network_fout}_epoch{args.n_epochs-1}.pth")))
+    # load network
+    pretrained_models = glob.glob(netout_dir + "/" + network_fout + "_epoch*.pth")
+    if len(pretrained_models) > 0:
+        max_num, name = 0, None
+        for pretrained_model in pretrained_models:
+            num = int(pretrained_model.split("_")[-1].split(".")[0].replace("epoch", ""))
+            if num>=max_num:
+                max_num, name = num, pretrained_model
+        if name is not None:
+            print("Loading pretrained model:", name)
+            load_path = os.path.join(netout_dir, f"{network_fout}_epoch{num}.pth")
+        else:
+            load_path = os.path.join(netout_dir, f"{network_fout}_epoch{n_epochs-1}.pth")
+            print("No pretrained model found")
+    else:
+        load_path = os.path.join(netout_dir, f"{network_fout}_epoch{n_epochs-1}.pth")
+        print("No pretrained model found")
+    #load_path = os.path.join(netout_dir, "u-efficientnet-b4_s0_CELoss_capella_s0_0000_epoch15.pth")
+    network.load_state_dict(torch.load(load_path))
     network.to(device).eval()
     
     # evaluation over all folders
@@ -306,7 +325,6 @@ if test_mode == True:
         
     for k in range(len(cities)):
         city = cities[k]
-        print(city)
         test_pths_tmp = []
         for pth_tmp in test_pths:
             if city in pth_tmp:
@@ -320,7 +338,9 @@ if test_mode == True:
         fn_tmp = np.zeros(8)
         fp_tmp = np.zeros(8)
 
-        for fn_img in test_pths_tmp:
+        #for fn_img in test_pths_tmp:
+        for fn_img in tqdm(test_pths_tmp, desc=city): 
+        
             y_gt = source.dataset.load_grayscale(fn_img)
             img = source.dataset.load_multiband(str(fn_img).replace("/labels/","/images/"))
 

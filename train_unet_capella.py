@@ -201,6 +201,9 @@ if train_city != 'all':
 
 network_fout += "_s"+str(seed)
 network_fout += "_" + str(date)
+network_fout += "_f" + str(args.img_factor)
+network_fout += "_r" + str(args.rotate)
+
 print("Model output name  :", network_fout)
 print("Number of parameters: ", params)
 

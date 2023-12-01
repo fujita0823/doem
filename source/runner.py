@@ -60,7 +60,7 @@ def train_epoch(
             optimizer.step()
 
             if figlog_dir is not None and epoch % 10 == 0:
-                train_figlog_dir = figlog_dir / "train"
+                train_figlog_dir = figlog_dir + "/train"
                 os.makedirs(train_figlog_dir, exist_ok=True)
                 save_fig_outputs(outputs, train_figlog_dir, epoch=epoch)
 
@@ -99,7 +99,7 @@ def valid_epoch(
                 loss = criterion(outputs, y)
 
             if figlog_dir is not None:
-                valid_figlog_dir = figlog_dir / "valid"
+                valid_figlog_dir = figlog_dir + "/valid"
                 os.makedirs(valid_figlog_dir, exist_ok=True)
                 save_fig_outputs(outputs, figlog_dir, epoch=epoch)
 

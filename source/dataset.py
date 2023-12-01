@@ -38,13 +38,13 @@ def save_img(path,img,crs,transform):
 
 
 class Dataset(BaseDataset):
-    def __init__(self, label_list, classes=None, size=128, train=False, factor=1.0, rotate=0):
+    def __init__(self, label_list, classes=None, size=1024, train=False, factor=1.0, rotate=0):
         self.fns = label_list
         if rotate == 0:
             self.augm = T.train_augm3 if train else T.valid_augm
         else:
             self.augm = T.train_augm4 if train else T.valid_augm
-        self.size = size
+        self.size = int(size*factor)
         self.train = train
         self.to_tensor = T.ToTensor(classes=classes)
         self.load_multiband = load_multiband
@@ -64,7 +64,6 @@ class Dataset(BaseDataset):
         if self.train:
             data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
         else:
-            #data = self.augm({"image": img, "mask": msk})
             data = self.augm({"image": img, "mask": msk}, 1024)
         data = self.to_tensor(data)
 

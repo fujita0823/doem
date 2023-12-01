@@ -163,7 +163,7 @@ else:
 # ---------------------------
 # --- Define data loaders ---
 # ---------------------------
-trainset = source.dataset.Dataset(train_pths, classes=classes, size=512, train=True, factor=args.img_factor, rotate=args.rotate)
+trainset = source.dataset.Dataset(train_pths, classes=classes, train=True, factor=args.img_factor, rotate=args.rotate)
 validset = source.dataset.Dataset(val_pths, classes=classes, train=False, factor=args.img_factor, rotate=args.rotate)
 testset = source.dataset.Dataset(test_pths, classes=classes, train=False, factor=args.img_factor, rotate=args.rotate)
 

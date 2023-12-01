@@ -3,6 +3,7 @@ import numpy as np
 import rasterio
 from torch.utils.data import Dataset as BaseDataset
 from . import transforms as T
+from pathlib import Path
 
 
 def load_multiband(path, factor=1.0):
@@ -37,15 +38,21 @@ def save_img(path,img,crs,transform):
 
 
 class Dataset(BaseDataset):
-    def __init__(self, label_list, classes=None, size=128, train=False, factor=1.0):
+    def __init__(self, label_list, classes=None, size=128, train=False, factor=1.0, rotate=0):
         self.fns = label_list
-        self.augm = T.train_augm3 if train else T.valid_augm
+        if rotate == 0:
+            self.augm = T.train_augm3 if train else T.valid_augm
+        else:
+            self.augm = T.train_augm4 if train else T.valid_augm
         self.size = size
         self.train = train
         self.to_tensor = T.ToTensor(classes=classes)
         self.load_multiband = load_multiband
         self.load_grayscale = load_grayscale
         self.factor = factor
+        city_angles = { "saitama1":130, "chiba1":-170, "tokyo1":-10, "tokyo2":-10, "tokyo3":15}
+        train_fn_city = [Path(f).parents[1].name for f in label_list]
+        self.angles = [rotate * city_angles[city] for city in train_fn_city]
 
     def __getitem__(self, idx):
         img = self.load_multiband(self.fns[idx].replace("labels", "images"), factor=self.factor)
@@ -55,7 +62,7 @@ class Dataset(BaseDataset):
             img = np.repeat(img, 3, axis=-1)
 
         if self.train:
-            data = self.augm({"image": img, "mask": msk}, self.size)
+            data = self.augm({"image": img, "mask": msk}, self.size, self.angles)
         else:
             #data = self.augm({"image": img, "mask": msk})
             data = self.augm({"image": img, "mask": msk}, 1024)

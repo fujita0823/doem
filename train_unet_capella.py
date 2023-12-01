@@ -34,6 +34,7 @@ parser.add_argument("--label_ver", type=int, default=1) # 1: first version, 2: r
 parser.add_argument("--log_plt", action="store_true")
 parser.add_argument("--log_fig", action="store_true")
 parser.add_argument("--outdir", type=str, default="results")
+parser.add_argument("--rotate", type=int, default=0) # 0: no rotation, 1: positive rotate, -1: negative rotate
 args = parser.parse_args()
 
 if args.wandb:
@@ -158,9 +159,9 @@ else:
 # ---------------------------
 # --- Define data loaders ---
 # ---------------------------
-trainset = source.dataset.Dataset(train_pths, classes=classes, size=512, train=True, factor=args.img_factor)
-validset = source.dataset.Dataset(val_pths, classes=classes, train=False, factor=args.img_factor)
-testset = source.dataset.Dataset(test_pths, classes=classes, train=False, factor=args.img_factor)
+trainset = source.dataset.Dataset(train_pths, classes=classes, size=512, train=True, factor=args.img_factor, rotate=args.rotate)
+validset = source.dataset.Dataset(val_pths, classes=classes, train=False, factor=args.img_factor, rotate=args.rotate)
+testset = source.dataset.Dataset(test_pths, classes=classes, train=False, factor=args.img_factor, rotate=args.rotate)
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=0)
 if train_city != 'all':

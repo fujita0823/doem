@@ -281,7 +281,7 @@ if test_mode == True:
     header = ['city','bareland','grass','developped','road','tree','water','cropland','buildings','mIoU']
     body = []
 
-    network.load_state_dict(torch.load(os.path.join(netout_dir, f"{network_fout}.pth")))
+    network.load_state_dict(torch.load(os.path.join(netout_dir, f"{network_fout}_epoch{args.n_epochs-1}.pth")))
     network.to(device).eval()
     
     # evaluation over all folders

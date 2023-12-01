@@ -62,7 +62,7 @@ class Dataset(BaseDataset):
             img = np.repeat(img, 3, axis=-1)
 
         if self.train:
-            data = self.augm({"image": img, "mask": msk}, self.size, self.angles)
+            data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
         else:
             #data = self.augm({"image": img, "mask": msk})
             data = self.augm({"image": img, "mask": msk}, 1024)

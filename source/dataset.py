@@ -68,7 +68,7 @@ class Dataset(BaseDataset):
             data = self.augm({"image": img, "mask": msk}, 1024)
         data = self.to_tensor(data)
 
-        return {"x": data["image"], "y": data["mask"], "fn": self.fns[idx]}
+        return {"x": data["image"], "y": data["mask"], "fn": self.fns[idx], "angle": self.angles[idx]}
 
     def __len__(self):
         return len(self.fns)

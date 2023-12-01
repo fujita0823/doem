@@ -35,6 +35,7 @@ parser.add_argument("--log_plt", action="store_true")
 parser.add_argument("--log_fig", action="store_true")
 parser.add_argument("--outdir", type=str, default="results")
 parser.add_argument("--rotate", type=int, default=0) # 0: no rotation, 1: positive rotate, -1: negative rotate
+parser.add_argument("--use_pe", action="store_true")
 args = parser.parse_args()
 
 if args.wandb:
@@ -67,7 +68,7 @@ date = "9999"
 # 7: cropland
 # 8: buildings
 class_names = ['bareland','grass','developped','road','tree','water','cropland','buildings']
-cities = os.listdir(root)
+cities = [f for f in os.listdir(args.dataset) if os.path.isdir(os.path.join(args.dataset, f))]
 
 np.random.seed(seed)
 torch.manual_seed(seed)
@@ -79,6 +80,8 @@ outdir = args.outdir
 os.makedirs(outdir, exist_ok=True)
 netout_dir = os.path.join(outdir, "trained")
 os.makedirs(netout_dir, exist_ok=True)
+csv_dir = os.path.join(outdir, "csv")
+os.makedirs(csv_dir, exist_ok=True)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 print("Number of epochs   :", n_epochs)
@@ -181,6 +184,9 @@ network = smp.Unet(
     decoder_attention_type="scse",
 )
 
+if args.use_pe:
+    network.usage = "pe"
+
 # count parameters
 params = 0
 for p in network.parameters():
@@ -199,6 +205,7 @@ if train_city != 'all':
     network.load_state_dict(torch.load(os.path.join(outdir, f"{network_fout}_epoch{n_epochs-1}.pth")))
     network_fout = f"{network.name}_s{seed}_{criterion.name}_{train_city}"
 
+network_fout += "_" + str(network.usage)
 network_fout += "_s"+str(seed)
 network_fout += "_" + str(date)
 network_fout += "_f" + str(args.img_factor)
@@ -289,7 +296,7 @@ if test_mode == True:
     
     # evaluation over all folders
     
-    csvfile = os.path.join("csv",f"{network_fout}.csv")
+    csvfile = os.path.join(csv_dir,f"{network_fout}.csv")
     ious_all = []
     
     # tp_all, fn_all, fp_all are used to calculate IoU for all data
@@ -439,6 +446,7 @@ else:
             device=device,
             epoch=epoch,
             figlog_dir=figlog_dir,
+            use_pe=args.use_pe
         )
 
         logs_valid = source.runner.valid_epoch(
@@ -449,6 +457,7 @@ else:
             device=device,
             epoch=epoch,
             figlog_dir=figlog_dir,
+            use_pe=args.use_pe
         )
 
         train_hist.append(logs_train)

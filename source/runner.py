@@ -39,6 +39,7 @@ def train_epoch(
     score_meter=None,
     epoch=None,
     figlog_dir=None,
+    use_pe=False
 ):
 
     loss_meter = AverageMeter()
@@ -54,7 +55,10 @@ def train_epoch(
             n = x.shape[0]
 
             optimizer.zero_grad()
-            outputs = model.forward(x)
+            if use_pe:
+                outputs = model.forward(x, sample["angle"].to(device))
+            else:
+                outputs = model.forward(x)
             loss = criterion(outputs, y)
             loss.backward()
             optimizer.step()
@@ -81,6 +85,7 @@ def valid_epoch(
     device="cpu",
     epoch=None,
     figlog_dir=None,
+    use_pe=False,
 ):
 
     loss_meter = AverageMeter()
@@ -95,7 +100,10 @@ def valid_epoch(
             n = x.shape[0]
 
             with torch.no_grad():
-                outputs = model.forward(x)
+                if use_pe:
+                    outputs = model.forward(x, sample["angle"].to(device))
+                else:
+                    outputs = model.forward(x)
                 loss = criterion(outputs, y)
 
             if figlog_dir is not None:

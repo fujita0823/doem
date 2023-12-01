@@ -33,6 +33,7 @@ parser.add_argument("--wandb", action="store_true")
 parser.add_argument("--label_ver", type=int, default=1) # 1: first version, 2: revised version
 parser.add_argument("--log_plt", action="store_true")
 parser.add_argument("--log_fig", action="store_true")
+parser.add_argument("--outdir", type=str, default="results")
 args = parser.parse_args()
 
 if args.wandb:
@@ -54,7 +55,7 @@ test_mode = args.test_mode
 train_city = args.train_city
 large_test = args.large_test
 label_ver = args.label_ver
-date = "0000"
+date = "9999"
 
 # 1: bareland
 # 2: grass
@@ -73,7 +74,7 @@ torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-outdir = "results"
+outdir = args.outdir
 os.makedirs(outdir, exist_ok=True)
 netout_dir = os.path.join(outdir, "trained")
 os.makedirs(netout_dir, exist_ok=True)

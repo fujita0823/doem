@@ -37,6 +37,7 @@ parser.add_argument("--log_fig", action="store_true")
 parser.add_argument("--outdir", type=str, default="results")
 parser.add_argument("--rotate", type=int, default=0) # 0: no rotation, 1: positive rotate, -1: negative rotate
 parser.add_argument("--use_pe", action="store_true")
+parser.add_argument("--use_attention", action="store_true")
 args = parser.parse_args()
 
 if args.wandb:
@@ -187,6 +188,8 @@ network = smp.Unet(
 
 if args.use_pe:
     network.usage = "pe"
+elif args.use_attention:
+    network.usage = "attention"
 
 # count parameters
 params = 0

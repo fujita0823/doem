@@ -3,6 +3,8 @@ from . import initialization as init
 import math
 from PIL import Image
 import numpy as np
+from skimage.feature import greycomatrix
+import warnings
 
 
 class SegmentationModel(torch.nn.Module):
@@ -24,11 +26,19 @@ class SegmentationModel(torch.nn.Module):
                 new_features[i] = feature + pe(feature)
             decoder_output = self.decoder(*new_features)
         elif self.usage == "attention":
+            f_l = get_laplacian(x)
             new_features = [torch.zeros_like(feature) for feature in features]
             #TODO: flag for saving figs in Attention
             attn = Attention(save_fig=False)
             for i, feature in enumerate(features):
-                new_features[i] = attn(feature)
+                new_features[i] = attn(feature, f_l)
+            decoder_output = self.decoder(*new_features)
+        elif self.usage == "glcm":
+            glcm_features = extract_glcms(x)
+            new_features = [torch.zeros_like(feature) for feature in features]
+            for i, feature in enumerate(features):
+                print(feature.shape, glcm_features[i].shape)
+                new_features[i] = feature + glcm_features[i].resize(feature.shape)
             decoder_output = self.decoder(*new_features)
         else:
             decoder_output = self.decoder(*features)
@@ -81,22 +91,24 @@ class PositionalEncoding(torch.nn.Module):
         pe = torch.tensor(self.pe[0,:, :x.size(1)], requires_grad=False, device=self.device)
         x = (x.permute(2,3,0,1) + pe).permute(2,3,0,1)
         return x
-    
+
+def get_laplacian(x):
+    b,c,h,w, = x.shape
+    kernel_conv = torch.nn.Conv2d(in_channels=c,out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
+    # make laplacian filter
+    kernel_lap = torch.tensor([[0,1,0],[1,-4,1],[0,1,0]], dtype=torch.float32).expand(1,c,3,3)
+    kernel_conv.weight = torch.nn.Parameter(kernel_lap, requires_grad=False)
+    kernel_conv = kernel_conv.to(x.device)
+    return kernel_conv(x)
 
 class Attention(torch.nn.Module):
     def __init__(self, save_fig=False):
         super().__init__()
         self.save_fig = save_fig
     
-    def forward(self, x):
+    def forward(self, x, f_l):
         b,c,h,w, = x.shape
-        kernel_conv = torch.nn.Conv2d(c, c, kernel_size=3, stride=1, padding=1, bias=False)
-        # make laplacian filter
-        kernel_lap = torch.tensor([[0,1,0],[1,-4,1],[0,1,0]], dtype=torch.float32).expand(c,c,3,3)
-        kernel_conv.weight = torch.nn.Parameter(kernel_lap, requires_grad=False)
-        kernel_conv = kernel_conv.to(x.device)
-        f_l = kernel_conv(x)
-
+        f_l = torch.nn.functional.interpolate(f_l, size=(h,w), mode='bilinear', align_corners=False).expand(b,c,h,w)
 
         conv_1 = torch.nn.Conv2d(c, c, kernel_size=1, stride=1, padding=0, bias=False).to(x.device)
         conv_2 = torch.nn.Conv2d(c, c, kernel_size=1, stride=1, padding=0, bias=False).to(x.device)
@@ -111,6 +123,17 @@ class Attention(torch.nn.Module):
 
         # sigmoid activation
         return x + torch.sigmoid(_x)
+
+def extract_glcms(x):
+    warnings.simplefilter('ignore')
+    b,c,h,w, = x.shape
+    glcms = []
+    for i in range(b):
+        input_ = (x[i,0,:,:].cpu().detach().numpy()*255).astype(np.uint8)
+        glcm = greycomatrix(input_, distances=[5], angles=[0, np.pi/4, np.pi/2, 3*np.pi/4], levels=256, normed=True)
+        print(glcm.shape, "glcm shape")
+        glcms.append(np.tile(glcm, (1,1,3,1)))
+    return torch.tensor(glcms, dtype=torch.float32, device=x.device)
 
 def save_fig_outputs(outputs, fout_dir, header=""):
     outputs = outputs.cpu().detach().numpy()

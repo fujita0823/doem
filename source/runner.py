@@ -2,6 +2,7 @@ import torch
 import os
 from tqdm import tqdm
 from .utils import save_fig_outputs
+from PIL import Image
 
 
 class AverageMeter:
@@ -49,12 +50,13 @@ def train_epoch(
     model.to(device).train()
     with tqdm(dataloader, desc="Train") as iterator:
 
-        for sample in iterator:
+        for idx, sample in enumerate(iterator):
             x = sample["x"].to(device)
             y = sample["y"].to(device)
             n = x.shape[0]
 
             optimizer.zero_grad()
+            save_fig_outputs(x, figlog_dir, idx)
             if use_pe:
                 outputs = model.forward(x, sample["angle"].to(device))
             else:
@@ -63,10 +65,10 @@ def train_epoch(
             loss.backward()
             optimizer.step()
 
-            if figlog_dir is not None and epoch % 10 == 0:
+            if figlog_dir is not None and epoch % 10 == 0: 
                 train_figlog_dir = figlog_dir + "/train"
                 os.makedirs(train_figlog_dir, exist_ok=True)
-                save_fig_outputs(outputs, train_figlog_dir, epoch=epoch)
+                save_fig_outputs(outputs, train_figlog_dir, epoch)
 
             loss_meter.update(loss.cpu().detach().numpy(), n=n)
             score_meter.update(metric(outputs, y).cpu().detach().numpy(), n=n)
@@ -94,19 +96,21 @@ def valid_epoch(
     model.to(device).eval()
 
     with tqdm(dataloader, desc="Valid") as iterator:
-        for sample in iterator:
+        #for sample in iterator:
+        for idx, sample in enumerate(iterator):
             x = sample["x"].to(device)
             y = sample["y"].to(device)
             n = x.shape[0]
 
             with torch.no_grad():
+                save_fig_outputs(x, figlog_dir, idx)
                 if use_pe:
                     outputs = model.forward(x, sample["angle"].to(device))
                 else:
                     outputs = model.forward(x)
                 loss = criterion(outputs, y)
 
-            if figlog_dir is not None:
+            if figlog_dir is not None and False:
                 valid_figlog_dir = figlog_dir + "/valid"
                 os.makedirs(valid_figlog_dir, exist_ok=True)
                 save_fig_outputs(outputs, figlog_dir, epoch=epoch)
@@ -187,3 +191,13 @@ def valid_epoch2(
             logs.update({metric.name: score_meter.avg})
             iterator.set_postfix_str(format_logs(logs))
     return logs
+
+
+
+def save_fig_outputs(outputs, fout_dir, img_i):
+    for idx in range(outputs.shape[0]):
+        output = outputs[idx]
+        fout = fout_dir + "/" + str(idx) + f"_img_{str(img_i)}"
+        with torch.no_grad():
+            output = output.cpu().numpy()[0]
+            Image.fromarray(output, "L").save(fout+'.png')

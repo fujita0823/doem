@@ -13,4 +13,4 @@ log_options="--wandb --log_plt --log_fig"
 python3 train_unet_capella.py --dataset $DATSET --outdir $OUTDIR --seed $SEED --n_epochs $EPOCHS $train_options $log_options
 
 # test
-python3 train_unet_capella.py --dataset $DATSET --outdir $OUTDIR --seed $SEED --n_epochs $EPOCHS --testmode $train_options $log_options
+python3 train_unet_capella.py --dataset $DATSET --outdir $OUTDIR --seed $SEED --n_epochs $EPOCHS --test_mode $train_options $log_options

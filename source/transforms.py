@@ -86,9 +86,9 @@ def train_augm3(sample, size=512, angle=0):
 
 def train_augm4(sample, size=512, angle=[0,0]):
     augms = [
-        A.Rotate(limit=[angle, angle]),
         A.PadIfNeeded(size, size, border_mode=0, value=0, p=1.0),
         A.RandomCrop(size, size, p=1.0),
+        A.Rotate(limit=[angle, angle]),
     ]
     return A.Compose(augms)(image=sample["image"], mask=sample["mask"])
 

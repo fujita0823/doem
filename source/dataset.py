@@ -2,8 +2,10 @@ import os
 import numpy as np
 import rasterio
 from torch.utils.data import Dataset as BaseDataset
+from torchvision.transforms import functional as F
 from . import transforms as T
 from pathlib import Path
+from PIL import Image
 
 
 def load_multiband(path, factor=1.0):
@@ -44,6 +46,7 @@ class Dataset(BaseDataset):
             self.augm = T.train_augm3 if train else T.valid_augm
         else:
             self.augm = T.train_augm4 if train else T.valid_augm
+        self.rotate = rotate
         self.size = int(size*factor)
         self.train = train
         self.to_tensor = T.ToTensor(classes=classes)
@@ -60,12 +63,27 @@ class Dataset(BaseDataset):
 
         if img.shape[-1] == 1:
             img = np.repeat(img, 3, axis=-1)
+        
+        if self.rotate != 0:
+            img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * self.angles[idx])
+            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * self.angles[idx])
+            img = np.array(img)
+            msk = np.array(msk)
+            data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
 
         if self.train:
+            img = F.rotate(Image.fromarray(img.astype('uint8')), self.angles[idx])
+            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.angles[idx])
+            img = np.array(img)
+            msk = np.array(msk)
             data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
         else:
             data = self.augm({"image": img, "mask": msk}, 1024)
         data = self.to_tensor(data)
+
+        if False:
+            output = img[:,:,0]
+            Image.fromarray(output, "L").save("./tmp/rotated_"+str(idx)+'.png') 
 
         return {"x": data["image"], "y": data["mask"], "fn": self.fns[idx], "angle": self.angles[idx]}
 

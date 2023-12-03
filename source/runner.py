@@ -56,7 +56,6 @@ def train_epoch(
             n = x.shape[0]
 
             optimizer.zero_grad()
-            save_fig_outputs(x, figlog_dir, idx)
             if use_pe:
                 outputs = model.forward(x, sample["angle"].to(device))
             else:
@@ -103,14 +102,13 @@ def valid_epoch(
             n = x.shape[0]
 
             with torch.no_grad():
-                save_fig_outputs(x, figlog_dir, idx)
                 if use_pe:
                     outputs = model.forward(x, sample["angle"].to(device))
                 else:
                     outputs = model.forward(x)
                 loss = criterion(outputs, y)
 
-            if figlog_dir is not None and False:
+            if figlog_dir is not None:
                 valid_figlog_dir = figlog_dir + "/valid"
                 os.makedirs(valid_figlog_dir, exist_ok=True)
                 save_fig_outputs(outputs, figlog_dir, epoch=epoch)

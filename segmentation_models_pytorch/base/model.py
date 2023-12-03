@@ -3,7 +3,7 @@ from . import initialization as init
 import math
 from PIL import Image
 import numpy as np
-from skimage.feature import greycomatrix
+#from skimage.feature import greycomatrix
 import warnings
 
 

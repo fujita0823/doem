@@ -69,7 +69,6 @@ class Dataset(BaseDataset):
             msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * self.angles[idx])
             img = np.array(img)
             msk = np.array(msk)
-            data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
 
         if self.train:
             img = F.rotate(Image.fromarray(img.astype('uint8')), self.angles[idx])

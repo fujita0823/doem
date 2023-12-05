@@ -19,6 +19,7 @@ from tqdm import tqdm
 import time
 import source.test_crop_function as tcf
 import wandb
+import torchsummary
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="../DEMO/capella-oem/")
@@ -164,7 +165,7 @@ else:
 # ---------------------------
 # --- Define data loaders ---
 # ---------------------------
-trainset = source.dataset.Dataset(train_pths, classes=classes, train=True, factor=args.img_factor, rotate=args.rotate)
+trainset = source.dataset.Dataset(train_pths, classes=classes, train=True, size=512, factor=args.img_factor, rotate=args.rotate)
 validset = source.dataset.Dataset(val_pths, classes=classes, train=False, factor=args.img_factor, rotate=args.rotate)
 testset = source.dataset.Dataset(test_pths, classes=classes, train=False, factor=args.img_factor, rotate=args.rotate)
 
@@ -185,6 +186,7 @@ network = smp.Unet(
     encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
     decoder_attention_type="scse",
 )
+torchsummary.summary(network.to(device), (3, 1024, 1024))
 
 if args.use_pe:
     network.usage = "pe"

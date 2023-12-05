@@ -65,10 +65,12 @@ class Dataset(BaseDataset):
             img = np.repeat(img, 3, axis=-1)
         
         if self.rotate != 0:
+            #Image.fromarray(img[:,:,0], "L").save("./tmp/imgo_"+str(idx)+'.png')
             img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * self.angles[idx])
             msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * self.angles[idx])
             img = np.array(img)
             msk = np.array(msk)
+            #Image.fromarray(img[:,:,0], "L").save("./tmp/imgr_"+str(idx)+'.png')
 
         if self.train:
             img = F.rotate(Image.fromarray(img.astype('uint8')), self.angles[idx])

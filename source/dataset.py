@@ -73,10 +73,6 @@ class Dataset(BaseDataset):
             #Image.fromarray(img[:,:,0], "L").save("./tmp/imgr_"+str(idx)+'.png')
 
         if self.train:
-            img = F.rotate(Image.fromarray(img.astype('uint8')), self.angles[idx])
-            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.angles[idx])
-            img = np.array(img)
-            msk = np.array(msk)
             data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
         else:
             data = self.augm({"image": img, "mask": msk}, 1024)

@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import source
 import segmentation_models_pytorch as smp
+from unetformer import UNetFormer
 #import segmentation_models_pytorch_yky as smp
 import glob
 import csv
@@ -20,6 +21,9 @@ import time
 import source.test_crop_function as tcf
 import wandb
 import torchsummary
+
+## DO NOT SET BATCH SIZE 2 OR 3
+## Because if 2 or 3, loss function does not work well
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="../DEMO/capella-oem/")
@@ -39,6 +43,7 @@ parser.add_argument("--outdir", type=str, default="results")
 parser.add_argument("--rotate", type=int, default=0) # 0: no rotation, 1: positive rotate, -1: negative rotate
 parser.add_argument("--use_pe", action="store_true")
 parser.add_argument("--use_attention", action="store_true")
+parser.add_argument("--network", type=str, default="unet")
 args = parser.parse_args()
 
 if args.wandb:
@@ -179,14 +184,23 @@ else:
 # --------------------------
 #       network setup
 # --------------------------
-network = smp.Unet(
-    classes=n_classes,
-    activation=None,
-    encoder_weights="imagenet",
-    encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
-    decoder_attention_type="scse",
-)
-torchsummary.summary(network.to(device), (3, 1024, 1024))
+if args.network == "unet":
+    network = smp.Unet(
+        classes=n_classes,
+        activation=None,
+        encoder_weights="imagenet",
+        encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
+        decoder_attention_type="scse",
+    )
+    criterion = source.losses.CEWithLogitsLoss(weights=classes_wt, device=device)
+    criterion_name = 'CE'
+elif args.network == "unetformer":
+    network = UNetFormer(
+        n_classes=n_classes,
+    )
+    criterion = source.losses.UnetFormerLoss(weights=classes_wt, device=device)
+    criterion_name = 'UnetFormerLoss'
+#torchsummary.summary(network.to(device), (3, 1024, 1024))
 
 if args.use_pe:
     network.usage = "pe"
@@ -199,8 +213,6 @@ for p in network.parameters():
     if p.requires_grad:
         params += p.numel()
 
-criterion = source.losses.CEWithLogitsLoss(weights=classes_wt, device=device)
-criterion_name = 'CE'
 metric = source.metrics.IoU2()
 optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
 if label_ver == 1:
@@ -459,31 +471,64 @@ else:
     else:
         figlog_dir = None    
 
-    for epoch in range(n_epochs):
+    if False:
+        train_path = "results/trained/UNetFormer-swsl-resnet18_s0_UnetFormerLoss_capella_segmentation_s0_9999_f1.0_r0_epoch43.pth"
+        train_path = "results/trained/UNetFormer-swsl-resnet18_s9999_UnetFormerLoss_capella_segmentation_s9999_9999_f1.0_r0_epoch25.pth"
+        network.load_state_dict(torch.load(train_path))
+        base_epoch = 25
+    else:
+        base_epoch = -1
+
+    for epoch in range(base_epoch+1, base_epoch+1+n_epochs):
         print(f"\nEpoch: {epoch + 1}")
 
-        logs_train = source.runner.train_epoch(
-            model=network,
-            optimizer=optimizer,
-            criterion=criterion,
-            metric=metric,
-            dataloader=train_loader,
-            device=device,
-            epoch=epoch,
-            figlog_dir=figlog_dir,
-            use_pe=args.use_pe
-        )
+        if args.network == "unet":
+            logs_train = source.runner.train_epoch(
+                model=network,
+                optimizer=optimizer,
+                criterion=criterion,
+                metric=metric,
+                dataloader=train_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
 
-        logs_valid = source.runner.valid_epoch(
-            model=network,
-            criterion=criterion,
-            metric=metric,
-            dataloader=valid_loader,
-            device=device,
-            epoch=epoch,
-            figlog_dir=figlog_dir,
-            use_pe=args.use_pe
-        )
+            logs_valid = source.runner.valid_epoch(
+                model=network,
+                criterion=criterion,
+                metric=metric,
+                dataloader=valid_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+
+        elif args.network == "unetformer": 
+            
+            logs_train = source.runner.train_epoch_UNetFormer(
+                model=network,
+                optimizer=optimizer,
+                criterion=criterion,
+                metric=metric,
+                dataloader=train_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+            logs_valid = source.runner.valid_epoch_UNetFormer(
+                model=network,
+                criterion=criterion,
+                metric=metric,
+                dataloader=valid_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
 
         train_hist.append(logs_train)
         valid_hist.append(logs_valid)
@@ -495,8 +540,9 @@ else:
             wb_logs["valid_loss"] = logs_valid[criterion.name]
             wb_logs["valid_iou"] = logs_valid[metric.name]
             wandb.log(wb_logs)
-       
+    
         score = logs_valid[metric.name]
+        
 
         if args.log_plt:
             prog_dir = os.path.join(outdir, "progress")
@@ -512,7 +558,6 @@ else:
         
         if max_score < score or epoch == n_epochs-1:
             max_score = score
-            #torch.save(network, os.path.join(outdir, f"{network_fout}.pth"))
             torch.save(network.state_dict(), os.path.join(netout_dir, f"{network_fout}_epoch{epoch}.pth"))
             print("Model saved!")
 

@@ -416,18 +416,26 @@ class FeatureRefinementHead(nn.Module):
 
 class AuxHead(nn.Module):
 
-    def __init__(self, in_channels=64, num_classes=8):
+    def __init__(self, in_channels=64, num_classes=8, estimate_angle=False):
         super().__init__()
         self.conv = ConvBNReLU(in_channels, in_channels)
         self.drop = nn.Dropout(0.1)
         self.conv_out = Conv(in_channels, num_classes, kernel_size=1)
+        if estimate_angle or True:
+            self.estimate_angle = True
+            self.estimate_angle_layer = nn.Linear(in_channels, 1)
 
     def forward(self, x, h, w):
         feat = self.conv(x)
         feat = self.drop(feat)
         feat = self.conv_out(feat)
-        feat = F.interpolate(feat, size=(h, w), mode='bilinear', align_corners=False)
-        return feat
+        if self.estimate_angle or True:
+            est_angle = self.estimate_angle_layer(feat)
+            feat = F.interpolate(feat, size=(h, w), mode='bilinear', align_corners=False)
+            return feat, est_angle
+        else:
+            feat = F.interpolate(feat, size=(h, w), mode='bilinear', align_corners=False)
+            return feat
 
 class Decoder(nn.Module):
     def __init__(
@@ -465,20 +473,20 @@ class Decoder(nn.Module):
 
     def forward(self, res1, res2, res3, res4, h, w):
         if self.training:
-            x = self.b4
+            x = self.b4(self.pre_conv(res4))
             h4 = self.up4(x)
-            x = self.p3
+            x = self.p3(x, res3)
             x = self.b3(x)
             h3 = self.up3(x)
-            x = self.p2
+            x = self.p2(x, res2)
             x = self.b2(x)
             h2 = x
             x = self.p1(x, res1)
             x = self.segmentation_head(x)
             x = F.interpolate(x, size=(h, w), mode="bilinear", align_corners=False)
             ah = h4+h3+h2
-            ah = self.aux_head(ah, h, w)
-            return x, ah
+            ah, ea = self.aux_head(ah, h, w)
+            return x, ah, ea
         else:
             x = self.b4(self.pre_conv(res4))
             x = self.p3(x, res3)
@@ -529,13 +537,18 @@ class UNetFormer(nn.Module):
             n_classes,
         )
         self.name = "UNetFormer-{}".format(backbone_name.replace("_", "-"))
+        self.usage = "segmentation"
 
     def forward(self, x):
         h, w = x.size()[-2:]
         res1, res2, res3, res4 = self.backbone(x)
         if self.training:
-            x, ah = self.decoder(res1, res2, res3, res4, h, w)
-            return x, ah
+            if True:
+                x, ah, ea = self.decoder(res1, res2, res3, res4, h, w)
+                return x, ah, ea
+            else:
+                x, ah = self.decoder(res1, res2, res3, res4, h, w)
+                return x, ah
         else:
             x = self.decoder(res1, res2, res3, res4, h, w)
             return x

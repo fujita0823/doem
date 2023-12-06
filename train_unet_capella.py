@@ -519,6 +519,9 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
+
+            network.training = True 
+            
             logs_valid = source.runner.valid_epoch_UNetFormer(
                 model=network,
                 criterion=criterion,
@@ -529,7 +532,6 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
-
         train_hist.append(logs_train)
         valid_hist.append(logs_valid)
 
@@ -539,6 +541,7 @@ else:
             wb_logs["train_iou"] = logs_train[metric.name]
             wb_logs["valid_loss"] = logs_valid[criterion.name]
             wb_logs["valid_iou"] = logs_valid[metric.name]
+            wb_logs["angle_loss"] = logs_valid["angle_loss"]
             wandb.log(wb_logs)
     
         score = logs_valid[metric.name]

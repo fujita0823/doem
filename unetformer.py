@@ -423,14 +423,27 @@ class AuxHead(nn.Module):
         self.conv_out = Conv(in_channels, num_classes, kernel_size=1)
         if estimate_angle or True:
             self.estimate_angle = True
-            self.estimate_angle_layer = nn.Linear(in_channels, 1)
+            self.estimate_angle_layer = nn.Sequential(
+                nn.Linear(in_channels*in_channels*num_classes, in_channels),
+                nn.Tanh(),
+                nn.Linear(in_channels, 1),
+                nn.Tanh()
+            )
 
     def forward(self, x, h, w):
         feat = self.conv(x)
         feat = self.drop(feat)
         feat = self.conv_out(feat)
         if self.estimate_angle or True:
-            est_angle = self.estimate_angle_layer(feat)
+            #print(f"feat.shape: {feat.shape}")
+            #print(f"feat.shape: {feat.flatten(start_dim=2).shape}")
+            if feat.shape[-1] == 128:
+                angle_feat = F.interpolate(feat, size=(64,64), mode='bilinear', align_corners=False).flatten(start_dim=1)
+            else:
+                angle_feat = feat.flatten(start_dim=1)
+            est_angle = self.estimate_angle_layer(angle_feat)
+            #print(f"est_angle.shape: {est_angle.shape}")
+            #print(f"est_angle: {est_angle}")
             feat = F.interpolate(feat, size=(h, w), mode='bilinear', align_corners=False)
             return feat, est_angle
         else:
@@ -544,6 +557,7 @@ class UNetFormer(nn.Module):
         res1, res2, res3, res4 = self.backbone(x)
         if self.training:
             if True:
+                self.decoder.training = True
                 x, ah, ea = self.decoder(res1, res2, res3, res4, h, w)
                 return x, ah, ea
             else:

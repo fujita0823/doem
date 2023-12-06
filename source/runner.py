@@ -152,6 +152,7 @@ def train_epoch_UNetFormer(
 
             optimizer.zero_grad()
             outputs = model.forward(x)
+            criterion.training = True
             loss = criterion(outputs, y, a)
             loss.backward()
             optimizer.step()
@@ -196,8 +197,11 @@ def valid_epoch_UNetFormer(
                 a = sample["angle"].to(device)
 
             with torch.no_grad():
-                outputs = model.forward(x)
+                model.training = True
+                outputs, _, ea = model.forward(x)
+                criterion.training = False
                 loss = criterion(outputs, y)
+                angle_loss = torch.nn.MSELoss()(ea, a/180.0).cpu().detach().numpy()
 
             if figlog_dir is not None:
                 valid_figlog_dir = figlog_dir + "/valid"
@@ -209,6 +213,7 @@ def valid_epoch_UNetFormer(
             
             logs.update({criterion.name: loss_meter.avg})
             logs.update({metric.name: score_meter.avg})
+            logs.update({"angle_loss": angle_loss})
             iterator.set_postfix_str(format_logs(logs))
     return logs
 

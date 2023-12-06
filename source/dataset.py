@@ -55,7 +55,8 @@ class Dataset(BaseDataset):
         self.factor = factor
         city_angles = { "saitama1":130, "chiba1":-170, "tokyo1":-10, "tokyo2":-10, "tokyo3":15}
         train_fn_city = [Path(f).parents[1].name for f in label_list]
-        self.angles = [rotate * city_angles[city] for city in train_fn_city]
+        sign = 1 if rotate >= 0 else -1
+        self.angles = [sign * city_angles[city] for city in train_fn_city]
 
     def __getitem__(self, idx):
         img = self.load_multiband(self.fns[idx].replace("labels", "images"), factor=self.factor)
@@ -65,12 +66,14 @@ class Dataset(BaseDataset):
             img = np.repeat(img, 3, axis=-1)
         
         if self.rotate != 0:
+            print("Use rotating ")
             #Image.fromarray(img[:,:,0], "L").save("./tmp/imgo_"+str(idx)+'.png')
             img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * self.angles[idx])
             msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * self.angles[idx])
             img = np.array(img)
             msk = np.array(msk)
             #Image.fromarray(img[:,:,0], "L").save("./tmp/imgr_"+str(idx)+'.png')
+        
 
         if self.train:
             data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])

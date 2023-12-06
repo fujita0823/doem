@@ -76,18 +76,21 @@ class UnetFormerLoss(nn.Module):
         self.main_loss = JointLoss(CEWithLogitsLoss(weights, device), DiceLoss(), 1.0, 1.0)
         self.aux_loss = CEWithLogitsLoss(weights, device)
         self.name = "UnetFormerLoss"
+        self.training = True
 
     def forward(self, input, target, angle_target=None):
         ## if input.shape == (3, 4, 9, 1024, 1024), training
         ## if input.shape == (4, 9, 1024, 1024), inference
-        if len(input) == 3 or len(input) == 2:
+        #if len(input) == 3 or len(input) == 2:
+        if self.training:
             main_loss = self.main_loss(input[0], target)
             aux_loss = self.aux_loss(input[1], target)
             #aux_loss = (input[1] - 180) ** 2
-            angle_loss = torch.nn.functional.mse_loss(input[2], angle_target.float())
+            angle_loss = torch.nn.functional.mse_loss(input[2], angle_target.float()/180.0)
             loss = main_loss +  0.4 * aux_loss + 0.4 * angle_loss
         else:
             loss = self.main_loss(input, target)
+            #loss = self.main_loss(input, target)
         #loss = self.criterion(input, target.argmax(dim=1))
         return loss
     

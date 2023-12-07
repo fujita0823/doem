@@ -424,7 +424,9 @@ class AuxHead(nn.Module):
         if estimate_angle or True:
             self.estimate_angle = True
             self.estimate_angle_layer = nn.Sequential(
-                nn.Linear(in_channels*in_channels*num_classes, in_channels),
+                nn.Linear(in_channels*in_channels*num_classes, in_channels*16),
+                nn.Tanh(),
+                nn.Linear(in_channels*16, in_channels),
                 nn.Tanh(),
                 nn.Linear(in_channels, 2),
                 nn.Tanh()

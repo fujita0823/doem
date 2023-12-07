@@ -198,10 +198,10 @@ def valid_epoch_UNetFormer(
 
             with torch.no_grad():
                 model.training = True
-                outputs, _, ea = model.forward(x)
+                outputs = model.forward(x)
                 criterion.training = False
-                loss = criterion(outputs, y)
-                angle_loss = torch.nn.MSELoss()(ea, a/180.0).cpu().detach().numpy()
+                loss = criterion(outputs, y,a)
+                angle_loss = torch.nn.MSELoss()(outputs[2], a/180.0).cpu().detach().numpy()
 
             if figlog_dir is not None:
                 valid_figlog_dir = figlog_dir + "/valid"
@@ -209,7 +209,7 @@ def valid_epoch_UNetFormer(
                 save_fig_outputs(outputs, figlog_dir, epoch=epoch)
 
             loss_meter.update(loss.cpu().detach().numpy(), n=n)
-            score_meter.update(metric(outputs, y).cpu().detach().numpy(), n=n)
+            score_meter.update(metric(outputs[0], y).cpu().detach().numpy(), n=n)
             
             logs.update({criterion.name: loss_meter.avg})
             logs.update({metric.name: score_meter.avg})

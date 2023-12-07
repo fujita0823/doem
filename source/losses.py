@@ -75,6 +75,7 @@ class UnetFormerLoss(nn.Module):
         #self.aux_loss = SoftCrossEntropyLoss(smooth_factor=0.05,ignore_index=-100)
         self.main_loss = JointLoss(CEWithLogitsLoss(weights, device), DiceLoss(), 1.0, 1.0)
         self.aux_loss = CEWithLogitsLoss(weights, device)
+        self.loss = torch.nn.functional.mse_loss
         self.name = "UnetFormerLoss"
         self.training = True
 
@@ -82,6 +83,11 @@ class UnetFormerLoss(nn.Module):
         ## if input.shape == (3, 4, 9, 1024, 1024), training
         ## if input.shape == (4, 9, 1024, 1024), inference
         #if len(input) == 3 or len(input) == 2:
+        print(f"angle_target: {angle_target}")
+        #gt_angle = torch.Tensor([torch.sin(angle_target.float()/180.0), torch.cos(angle_target.float()/180.0)]).to(input.device)
+        s,c = torch.cos(angle_target.float()/180.0), torch.sin(angle_target.float()/180.0)
+        gt_angle = torch.cat((s.unsqueeze(1),c.unsqueeze(1)), dim=1)
+        return self.loss(input[2], gt_angle)
         if self.training:
             main_loss = self.main_loss(input[0], target)
             aux_loss = self.aux_loss(input[1], target)

@@ -426,7 +426,7 @@ class AuxHead(nn.Module):
             self.estimate_angle_layer = nn.Sequential(
                 nn.Linear(in_channels*in_channels*num_classes, in_channels),
                 nn.Tanh(),
-                nn.Linear(in_channels, 1),
+                nn.Linear(in_channels, 2),
                 nn.Tanh()
             )
 

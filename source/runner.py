@@ -3,6 +3,7 @@ import os
 from tqdm import tqdm
 from .utils import save_fig_outputs
 from PIL import Image
+import math
 
 
 class AverageMeter:
@@ -201,7 +202,10 @@ def valid_epoch_UNetFormer(
                 outputs = model.forward(x)
                 criterion.training = False
                 loss = criterion(outputs, y,a)
-                angle_loss = torch.nn.MSELoss()(outputs[2], a/180.0).cpu().detach().numpy()
+
+                a = a.float() * (math.pi/180.0)
+                gt_angle = torch.cat((torch.cos(a).unsqueeze(1),torch.sin(a).unsqueeze(1)), dim=1)
+                angle_loss = torch.nn.MSELoss()(outputs[2], gt_angle).cpu().detach().numpy()
 
             if figlog_dir is not None:
                 valid_figlog_dir = figlog_dir + "/valid"

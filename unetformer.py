@@ -424,12 +424,12 @@ class AuxHead(nn.Module):
         if estimate_angle or True:
             self.estimate_angle = True
             self.estimate_angle_layer = nn.Sequential(
-                nn.Linear(in_channels*in_channels*num_classes, in_channels),
+                nn.Linear(in_channels*in_channels*num_classes, in_channels*16),
                 nn.Tanh(),
-                #nn.Dropout(0.5),
-                #nn.Linear(in_channels*16, in_channels),
-                #nn.Tanh(),
-                #nn.Dropout(0.5),
+                nn.Dropout(0.5),
+                nn.Linear(in_channels*16, in_channels),
+                nn.Tanh(),
+                nn.Dropout(0.5),
                 nn.Linear(in_channels, 2),
                 nn.Tanh()
             )
@@ -489,7 +489,7 @@ class Decoder(nn.Module):
         self.init_weight()
 
     def forward(self, res1, res2, res3, res4, h, w):
-        if self.training:
+        if self.training or True:
             x = self.b4(self.pre_conv(res4))
             h4 = self.up4(x)
             x = self.p3(x, res3)
@@ -568,8 +568,10 @@ class UNetFormer(nn.Module):
                 x, ah = self.decoder(res1, res2, res3, res4, h, w)
                 return x, ah
         else:
-            x = self.decoder(res1, res2, res3, res4, h, w)
-            return x
+            x, ah, ea = self.decoder(res1, res2, res3, res4, h, w)
+            return x, ah, ea
+            #x = self.decoder(res1, res2, res3, res4, h, w)
+            #return x
 
 class PositionalEncoder(nn.Module):
     def __init__(self, num, dim):

@@ -44,6 +44,7 @@ parser.add_argument("--rotate", type=int, default=0) # 0: no rotation, 1: positi
 parser.add_argument("--use_pe", action="store_true")
 parser.add_argument("--use_attention", action="store_true")
 parser.add_argument("--network", type=str, default="unet")
+parser.add_argument("--angle_only", action="store_true")
 args = parser.parse_args()
 
 if args.wandb:
@@ -198,8 +199,12 @@ elif args.network == "unetformer":
     network = UNetFormer(
         n_classes=n_classes,
     )
-    criterion = source.losses.UnetFormerLoss(weights=classes_wt, device=device)
-    criterion_name = 'UnetFormerLoss'
+    if args.angle_only:
+        criterion = source.losses.AngleLoss()
+        criterion_name = 'AngleLoss'
+    else:
+        criterion = source.losses.UnetFormerLoss(weights=classes_wt, device=device)
+        criterion_name = 'UnetFormerLoss'
 #torchsummary.summary(network.to(device), (3, 1024, 1024))
 
 if args.use_pe:
@@ -505,6 +510,30 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
+        
+        elif args.network == "unetformer" and args.angle_only:
+            logs_train = source.runner.train_epoch_UNetFormer_angle(
+                model=network,
+                optimizer=optimizer,
+                criterion=criterion,
+                metric=metric,
+                dataloader=train_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+            network.training = True
+            logs_valid = source.runner.valid_epoch_UNetFormer_angle(
+                model=network,
+                criterion=criterion,
+                metric=metric,
+                dataloader=valid_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
 
         elif args.network == "unetformer": 
             
@@ -532,6 +561,7 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
+
         train_hist.append(logs_train)
         valid_hist.append(logs_valid)
 
@@ -541,7 +571,7 @@ else:
             wb_logs["train_iou"] = logs_train[metric.name]
             wb_logs["valid_loss"] = logs_valid[criterion.name]
             wb_logs["valid_iou"] = logs_valid[metric.name]
-            wb_logs["angle_loss"] = logs_valid["angle_loss"]
+            #wb_logs["angle_loss"] = logs_valid["angle_loss"]
             wandb.log(wb_logs)
     
         score = logs_valid[metric.name]

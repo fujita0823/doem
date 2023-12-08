@@ -6,6 +6,7 @@ from typing import Optional, Union, List
 from torch.nn import functional as F
 from torch.nn.modules.loss import _Loss
 import math
+import numpy as np
 
 
 
@@ -102,6 +103,26 @@ class UnetFormerLoss(nn.Module):
         else:
             loss = self.main_loss(input, target)
         return loss
+
+class AngleLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.name = "AngleLoss"
+    
+    def forward(self, input, target):
+        # input: [-1,1], shape [4,2], coordinates
+        # target: [0,360], shape [4], angle
+        target = target.float() * (math.pi/180.0)
+        target = torch.cat((torch.cos(target).unsqueeze(1),torch.sin(target).unsqueeze(1)), dim=1)
+        dot = torch.sum(input[2] * target, dim=1)
+        acos_loss = torch.acos(dot.clamp(-1+1e-6, 1-1e-6)).mean(dim=0)
+        #loss =  torch.nn.MSELoss()(input[2], target)
+        return acos_loss
+    
+    #def opt(self, input, target):
+        #target = target.float() * (math.pi/180.0)
+        #target = torch.cat((torch.cos(target).unsqueeze(1),torch.sin(target).unsqueeze(1)), dim=1)
+        #return acos_loss
     
 class SoftCrossEntropyLoss(nn.Module):
     """

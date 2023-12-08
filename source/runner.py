@@ -227,6 +227,90 @@ def valid_epoch_UNetFormer(
             iterator.set_postfix_str(format_logs(logs))
     return logs
 
+def train_epoch_UNetFormer_angle(
+    model=None,
+    optimizer=None,
+    criterion=None,
+    metric=None,
+    dataloader=None,
+    device="cpu",
+    loss_meter=None,
+    score_meter=None,
+    epoch=None,
+    figlog_dir=None,
+    use_pe=False
+):
+        loss_meter = AverageMeter()
+        score_meter = AverageMeter()
+        logs = {}
+    
+        model.to(device).train()
+        model.training = True
+        with tqdm(dataloader, desc="Train") as iterator:
+            for idx, sample in enumerate(iterator):
+                x = sample["x"].to(device)
+                a = sample["angle"].to(device)
+                n = x.shape[0]
+    
+                optimizer.zero_grad()
+                outputs = model.forward(x)
+                criterion.training = True
+                loss = criterion(outputs, a)
+                loss.backward()
+                optimizer.step()
+    
+                if figlog_dir is not None and epoch % 10 == 0: 
+                    train_figlog_dir = figlog_dir + "/train"
+                    os.makedirs(train_figlog_dir, exist_ok=True)
+                    save_fig_outputs(outputs, train_figlog_dir, epoch)
+    
+                loss_meter.update(loss.cpu().detach().numpy(), n=n)
+                score_meter.update(criterion(outputs, a).cpu().detach().numpy(), n=n)
+    
+                logs.update({criterion.name: loss_meter.avg})
+                logs.update({metric.name: score_meter.avg})
+                iterator.set_postfix_str(format_logs(logs))
+        return logs
+
+def valid_epoch_UNetFormer_angle(
+    model=None,
+    criterion=None,
+    metric=None,
+    dataloader=None,
+    device="cpu",
+    epoch=None,
+    figlog_dir=None,
+    use_pe=False,
+):
+    loss_meter = AverageMeter()
+    score_meter = AverageMeter()
+    logs = {}
+
+    model.to(device).eval()
+    with tqdm(dataloader, desc="Valid") as iterator:
+        for idx, sample in enumerate(iterator):
+            x = sample["x"].to(device)
+            a = sample["angle"].to(device)
+            n = x.shape[0]
+
+            with torch.no_grad():
+                outputs = model.forward(x)
+                loss = criterion(outputs, a)
+
+            if figlog_dir is not None:
+                valid_figlog_dir = figlog_dir + "/valid"
+                os.makedirs(valid_figlog_dir, exist_ok=True)
+                save_fig_outputs(outputs, figlog_dir, epoch=epoch)
+
+            loss_meter.update(loss.cpu().detach().numpy(), n=n)
+            score_meter.update(criterion(outputs, a).cpu().detach().numpy(), n=n)
+
+            logs.update({criterion.name: loss_meter.avg})
+            logs.update({metric.name: score_meter.avg})
+            iterator.set_postfix_str(format_logs(logs))
+    return logs
+    
+
 
 def train_epoch2(
     model=None,

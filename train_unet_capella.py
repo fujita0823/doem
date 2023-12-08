@@ -520,7 +520,7 @@ else:
                 use_pe=args.use_pe
             )
 
-            network.training = True 
+            #network.training = True 
             
             logs_valid = source.runner.valid_epoch_UNetFormer(
                 model=network,

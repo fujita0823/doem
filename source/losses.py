@@ -69,7 +69,7 @@ class JointLoss(nn.Module):
 
 
 class UnetFormerLoss(nn.Module):
-    def __init__(self, weights, device="cuda"):
+    def __init__(self, weights, device="cuda", angle_training_only=False):
         super().__init__()
         self.weight = torch.from_numpy(weights).float().to(device)
         #self.main_loss = JointLoss(SoftCrossEntropyLoss(smooth_factor=0.05, ignore_index=-100), DiceLoss(), 1.0, 1.0)
@@ -78,32 +78,29 @@ class UnetFormerLoss(nn.Module):
         self.aux_loss = CEWithLogitsLoss(weights, device)
         self.name = "UnetFormerLoss"
         self.training = True
-        self.loss = self.angle_loss
+        self.angle_training_only = angle_training_only
     
     def angle_loss(self, input, target):
         # input: [-1,1], shape [4,2], coordinates
         # target: [0,360], shape [4], angle
         target = target.float() * (math.pi/180.0)
-        s,c = torch.sin(target), torch.cos(target)
-        target = torch.cat((s.unsqueeze(1),c.unsqueeze(1)), dim=1)
-        return torch.nn.MSELoss()(input, target)
+        target = torch.cat((torch.cos(target).unsqueeze(1),torch.sin(target).unsqueeze(1)), dim=1)
+        loss =  torch.nn.MSELoss()(input, target)
+        return loss
 
     def forward(self, input, target, angle_target=None):
         ## if input.shape == (3, 4, 9, 1024, 1024), training
         ## if input.shape == (4, 9, 1024, 1024), inference
-        #if len(input) == 3 or len(input) == 2:
-        #gt_angle = torch.Tensor([torch.sin(angle_target.float()/180.0), torch.cos(angle_target.float()/180.0)]).to(input.device)
-        return self.loss(input[2], angle_target)
+        if self.angle_training_only:
+            return self.angle_loss(input[2], angle_target)
         if self.training:
             main_loss = self.main_loss(input[0], target)
             aux_loss = self.aux_loss(input[1], target)
-            #aux_loss = (input[1] - 180) ** 2
-            angle_loss = torch.nn.functional.mse_loss(input[2], angle_target.float()/180.0)
-            loss = main_loss +  0.4 * aux_loss + 0.4 * angle_loss
+            agl_loss = self.angle_loss(input[2], angle_target)
+            #print(f"main_loss: {main_loss}, aux_loss: {aux_loss}, agl_loss: {agl_loss}")
+            loss = main_loss +  0.4 * aux_loss + agl_loss
         else:
             loss = self.main_loss(input, target)
-            #loss = self.main_loss(input, target)
-        #loss = self.criterion(input, target.argmax(dim=1))
         return loss
     
 class SoftCrossEntropyLoss(nn.Module):

@@ -147,8 +147,7 @@ def train_epoch_UNetFormer(
         for idx, sample in enumerate(iterator):
             x = sample["x"].to(device)
             y = sample["y"].to(device)
-            if True:
-                a = sample["angle"].to(device)
+            a = sample["angle"].to(device)
             n = x.shape[0]
 
             optimizer.zero_grad()
@@ -198,14 +197,16 @@ def valid_epoch_UNetFormer(
                 a = sample["angle"].to(device)
 
             with torch.no_grad():
-                model.training = True
                 outputs = model.forward(x)
                 criterion.training = False
                 loss = criterion(outputs, y,a)
 
-                a = a.float() * (math.pi/180.0)
-                gt_angle = torch.cat((torch.cos(a).unsqueeze(1),torch.sin(a).unsqueeze(1)), dim=1)
-                angle_loss = torch.nn.MSELoss()(outputs[2], gt_angle).cpu().detach().numpy()
+                if len(outputs) == 3:
+                    a = a.float() * (math.pi/180.0)
+                    gt_angle = torch.cat((torch.cos(a).unsqueeze(1),torch.sin(a).unsqueeze(1)), dim=1)
+                    angle_loss = torch.nn.MSELoss()(outputs[2], gt_angle).cpu().detach().numpy()
+                    print(f"angle_loss: {angle_loss}, loss: {loss}, avg: {loss_meter.avg}")
+                    logs.update({"angle_loss": angle_loss})
 
             if figlog_dir is not None:
                 valid_figlog_dir = figlog_dir + "/valid"
@@ -213,11 +214,16 @@ def valid_epoch_UNetFormer(
                 save_fig_outputs(outputs, figlog_dir, epoch=epoch)
 
             loss_meter.update(loss.cpu().detach().numpy(), n=n)
-            score_meter.update(metric(outputs[0], y).cpu().detach().numpy(), n=n)
+            if len(outputs) == 3:
+                score_meter.update(metric(outputs[0], y).cpu().detach().numpy(), n=n)
+            elif len(outputs) == n:
+                score_meter.update(metric(outputs, y).cpu().detach().numpy(), n=n)
+            else:
+                print(f"What happend??")
+                raise ValueError
             
             logs.update({criterion.name: loss_meter.avg})
             logs.update({metric.name: score_meter.avg})
-            logs.update({"angle_loss": angle_loss})
             iterator.set_postfix_str(format_logs(logs))
     return logs
 

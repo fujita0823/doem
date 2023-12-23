@@ -22,6 +22,23 @@ class ToTensor:
             sample[key] = TF.to_tensor(sample[key].astype(np.float32) / 255.0)
         return sample
 
+class ToTensor_custom:
+    def __init__(self, classes):
+        self.classes = classes
+
+    def __call__(self, sample):
+        class_to_class = {
+            0:0, 1:1, 2:1, 3:1, 4:1, 5:1, 6:1, 7:1, 8:8
+        }
+        msks = [(sample["mask"] == v) for v in self.classes]
+        msk = np.stack(msks, axis=-1).astype(np.float32)
+        background = 1 - msk.sum(axis=-1, keepdims=True)
+        sample["mask"] = TF.to_tensor(np.concatenate((background, msk), axis=-1))
+
+        for key in [k for k in sample.keys() if k != "mask"]:
+            sample[key] = TF.to_tensor(sample[key].astype(np.float32) / 255.0)
+        return sample
+
 def valid_augm(sample, size=512):
     augms = [A.Resize(height=size, width=size, p=1.0)]
     return A.Compose(augms)(image=sample["image"], mask=sample["mask"])

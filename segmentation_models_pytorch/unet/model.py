@@ -3,6 +3,7 @@ from .decoder import UnetDecoder
 from ..encoders import get_encoder
 from ..base import SegmentationModel
 from ..base import SegmentationHead, ClassificationHead
+from torch import nn
 
 
 class Unet(SegmentationModel):
@@ -94,4 +95,128 @@ class Unet(SegmentationModel):
 
         self.name = "u-{}".format(encoder_name)
         self.usage = "unet"
+        self.initialize()
+
+class Unet_with_angle(SegmentationModel):
+    def __init__(
+        self,
+        encoder_name: str = "resnet34",
+        encoder_depth: int = 5,
+        encoder_weights: Optional[str] = "imagenet",
+        decoder_use_batchnorm: bool = True,
+        decoder_channels: List[int] = (256, 128, 64, 32, 16),
+        decoder_attention_type: Optional[str] = None,
+        in_channels: int = 3,
+        classes: int = 1,
+        activation: Optional[Union[str, callable]] = None,
+        aux_params: Optional[dict] = None,
+    ):
+        super().__init__()
+
+        self.encoder = get_encoder(
+            encoder_name,
+            in_channels=in_channels,
+            depth=encoder_depth,
+            weights=encoder_weights,
+        )
+
+        self.decoder_dir = nn.Sequential(
+            nn.Linear(448*16, 448),
+            nn.ReLU(),
+            nn.Linear(448, 1),
+            nn.Tanh()
+        )
+
+        self.segmentation_head = SegmentationHead(
+            in_channels=decoder_channels[-1],
+            out_channels=classes,
+            activation=activation,
+            kernel_size=3,
+        )
+
+        self.decoder = UnetDecoder(
+            encoder_channels=self.encoder.out_channels,
+            decoder_channels=decoder_channels,
+            n_blocks=encoder_depth,
+            use_batchnorm=decoder_use_batchnorm,
+            center=True if encoder_name.startswith("vgg") else False,
+            attention_type=decoder_attention_type,
+        )
+
+        self.segmentation_head = SegmentationHead(
+            in_channels=decoder_channels[-1],
+            out_channels=classes,
+            activation=activation,
+            kernel_size=3,
+        )
+
+        if aux_params is not None:
+            self.classification_head = ClassificationHead(
+                in_channels=self.encoder.out_channels[-1], **aux_params
+            )
+        else:
+            self.classification_head = None
+
+        self.name = "u-{}_with_angle".format(encoder_name)
+        self.usage = "with_angle"
+        self.initialize()
+
+class Unet_only_angle(SegmentationModel):
+    def __init__(
+        self,
+        encoder_name: str = "resnet34",
+        encoder_depth: int = 5,
+        encoder_weights: Optional[str] = "imagenet",
+        decoder_use_batchnorm: bool = True,
+        decoder_channels: List[int] = (256, 128, 64, 32, 16),
+        decoder_attention_type: Optional[str] = None,
+        in_channels: int = 3,
+        classes: int = 1,
+        activation: Optional[Union[str, callable]] = None,
+        aux_params: Optional[dict] = None,
+    ):
+        super().__init__()
+
+        self.encoder = get_encoder(
+            encoder_name,
+            in_channels=in_channels,
+            depth=encoder_depth,
+            weights=encoder_weights,
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(448*16, 448*4),
+            nn.BatchNorm1d(448*4), 
+            nn.Tanh(),
+            nn.Linear(448*4, 448),
+            nn.BatchNorm1d(448),
+            nn.Tanh(),
+            nn.Linear(448, 1),
+            nn.Tanh()
+        )
+
+        self.decoder_dir = nn.Sequential(
+            nn.Linear(448*16, 448*4),
+            nn.BatchNorm1d(448*4), 
+            nn.Dropout(0.4),
+            nn.Tanh(),
+            nn.Linear(448*4, 448),
+            nn.BatchNorm1d(448),
+            nn.Dropout(0.4),
+            nn.Tanh(),
+            nn.Linear(448, 2),
+            nn.Tanh()
+        )
+
+        self.segmentation_head = SegmentationHead(
+            in_channels=decoder_channels[-1],
+            out_channels=classes,
+            activation=activation,
+            kernel_size=3,
+        )
+
+        self.classification_head = None
+
+        self.name = "u-{}_only_angle".format(encoder_name)
+        self.usage = "only_angle"
         self.initialize()

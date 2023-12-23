@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import source
 import segmentation_models_pytorch as smp
-from unetformer import UNetFormer
+from unetformer import *
 #import segmentation_models_pytorch_yky as smp
 import glob
 import csv
@@ -20,7 +20,6 @@ from tqdm import tqdm
 import time
 import source.test_crop_function as tcf
 import wandb
-import torchsummary
 
 ## DO NOT SET BATCH SIZE 2 OR 3
 ## Because if 2 or 3, loss function does not work well
@@ -30,7 +29,7 @@ parser.add_argument("--dataset", type=str, default="../DEMO/capella-oem/")
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--batch_size", type=int, default=4)
-parser.add_argument("--n_epochs", type=int, default=30)
+parser.add_argument("--n_epochs", type=int, default=300)
 parser.add_argument("--test_mode", action="store_true")
 parser.add_argument("--train_city", type=str, default='all')
 parser.add_argument("--img_factor", type=float, default=1.0)
@@ -45,6 +44,7 @@ parser.add_argument("--use_pe", action="store_true")
 parser.add_argument("--use_attention", action="store_true")
 parser.add_argument("--network", type=str, default="unet")
 parser.add_argument("--angle_only", action="store_true")
+parser.add_argument("--unetformer_option", type=str, default="with_angle1")
 args = parser.parse_args()
 
 if args.wandb:
@@ -66,7 +66,7 @@ test_mode = args.test_mode
 train_city = args.train_city
 large_test = args.large_test
 label_ver = args.label_ver
-date = "9999"
+date = "1217"
 
 # 1: bareland
 # 2: grass
@@ -186,31 +186,89 @@ else:
 #       network setup
 # --------------------------
 if args.network == "unet":
-    network = smp.Unet(
-        classes=n_classes,
-        activation=None,
-        encoder_weights="imagenet",
-        encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
-        decoder_attention_type="scse",
-    )
-    criterion = source.losses.CEWithLogitsLoss(weights=classes_wt, device=device)
-    criterion_name = 'CE'
-elif args.network == "unetformer":
-    network = UNetFormer(
-        n_classes=n_classes,
-    )
-    if args.angle_only:
-        criterion = source.losses.AngleLoss()
-        criterion_name = 'AngleLoss'
-    else:
-        criterion = source.losses.UnetFormerLoss(weights=classes_wt, device=device)
-        criterion_name = 'UnetFormerLoss'
-#torchsummary.summary(network.to(device), (3, 1024, 1024))
+    unet_option = "only_angle"
+    unetformer_option = None
+    if unet_option == "none":
+        network = smp.Unet(
+            classes=n_classes,
+            activation=None,
+            encoder_weights="imagenet",
+            encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
+            decoder_attention_type="scse",
+        )
+        criterion = source.losses.CEWithLogitsLoss(weights=classes_wt, device=device)
+        criterion_name = 'CE'
+    elif unet_option == "with_angle":
+        network = smp.Unet_with_angle(
+            classes=n_classes,
+            activation=None,
+            encoder_weights="imagenet",
+            encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
+            decoder_attention_type="scse",
+        )
+        criterion = source.losses.UnetLoss_with_angle(weights=classes_wt, device=device)
+        criterion_name = 'UnetLoss'
+    elif unet_option == "only_angle":
+        network = smp.Unet_only_angle(
+            classes=n_classes,
+            activation=None,
+            encoder_weights="imagenet",
+            encoder_name="efficientnet-b4", #"se_resnext50_32x4d",
+            decoder_attention_type="scse",
+        )
 
-if args.use_pe:
-    network.usage = "pe"
-elif args.use_attention:
-    network.usage = "attention"
+        def print_model_is_train():
+            for param in network.parameters():
+                if not param.requires_grad:
+                    print("No", param.shape)
+        print_model_is_train()
+        criterion = source.losses.AngleLoss()
+        criterion_name = 'Angle'
+    else:
+        raise NotImplementedError
+elif args.network == "unetformer":
+    # UnetFormer has 3 Options: "none", "with_angle", "angle_only"
+    unet_option = None
+    unetformer_option = "with_angle"
+    unetformer_option = args.unetformer_option if args.network == "unetformer" else None
+    if unetformer_option == "none":
+        network = UNetFormer(
+            n_classes=n_classes,
+        )
+        criterion = source.losses.UnetFormerLoss(weights=classes_wt, device=device)
+        network.usage = "none"
+    elif unetformer_option == "with_angle1":
+        network = UNetFormer_with_angle1(
+            n_classes=n_classes,
+        )
+        criterion = source.losses.UnetFormerLoss_with_angle(weights=classes_wt, device=device)
+        network.usage = "with_angle1"
+    elif unetformer_option == "only_angle1":
+        network = UNetFormer_only_angle1(
+            n_classes=n_classes,
+        )
+        criterion = source.losses.AngleLoss()
+        network.usage = "only_angle1"
+    elif unetformer_option == "with_angle2":
+        network = UNetFormer_with_angle2(
+            n_classes=n_classes,
+        )
+        criterion = source.losses.UnetFormerLoss_with_angle(weights=classes_wt, device=device)
+        network.usage = "with_angle2"
+    elif unetformer_option == "only_angle2":
+        network = UNetFormer_only_angle2(
+            n_classes=n_classes,
+        )
+        criterion = source.losses.AngleLoss()
+        network.usage = "only_angle2"
+    else:
+        raise NotImplementedError
+
+
+#if args.use_pe:
+    #network.usage = "pe"
+#elif args.use_attention:
+    #network.usage = "attention"
 
 # count parameters
 params = 0
@@ -218,7 +276,10 @@ for p in network.parameters():
     if p.requires_grad:
         params += p.numel()
 
-metric = source.metrics.IoU2()
+if unetformer_option == "only_angle1" or unetformer_option == "only_angle2" or unet_option == "only_angle":
+    metric = source.losses.AngleLoss()
+else:
+    metric = source.metrics.IoU2()
 optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
 if label_ver == 1:
     network_fout = f"{network.name}_s{seed}_{criterion.name}_capella"
@@ -231,7 +292,7 @@ if train_city != 'all':
 network_fout += "_" + str(network.usage)
 network_fout += "_s"+str(seed)
 network_fout += "_" + str(date)
-network_fout += "_f" + str(args.img_factor)
+network_fout += "_f" + str(int(1/args.img_factor))
 network_fout += "_r" + str(args.rotate)
 
 print("Model output name  :", network_fout)
@@ -385,6 +446,8 @@ if test_mode == True:
             pred = []
             with torch.no_grad():
                 msk = network(input) 
+                if unet_option == "with_angle":
+                    msk = msk[0]
                 msk = torch.softmax(msk[:, :, ...], dim=1)
                 msk = msk.cpu().numpy()
 
@@ -477,17 +540,18 @@ else:
         figlog_dir = None    
 
     if False:
-        train_path = "results/trained/UNetFormer-swsl-resnet18_s0_UnetFormerLoss_capella_segmentation_s0_9999_f1.0_r0_epoch43.pth"
-        train_path = "results/trained/UNetFormer-swsl-resnet18_s9999_UnetFormerLoss_capella_segmentation_s9999_9999_f1.0_r0_epoch25.pth"
-        network.load_state_dict(torch.load(train_path))
-        base_epoch = 25
+        train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch29.pth"
+        train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r1_epoch32.pth"
+        loaded = torch.load(train_path)
+        network.load_state_dict(loaded)
+        base_epoch = 22
     else:
         base_epoch = -1
 
     for epoch in range(base_epoch+1, base_epoch+1+n_epochs):
         print(f"\nEpoch: {epoch + 1}")
 
-        if args.network == "unet":
+        if args.network == "unet" and unet_option == "none":
             logs_train = source.runner.train_epoch(
                 model=network,
                 optimizer=optimizer,
@@ -510,9 +574,8 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
-        
-        elif args.network == "unetformer" and args.angle_only:
-            logs_train = source.runner.train_epoch_UNetFormer_angle(
+        elif args.network == "unet" and unet_option == "with_angle":
+            logs_train = source.runner.train_epoch_UNet_with_angle(
                 model=network,
                 optimizer=optimizer,
                 criterion=criterion,
@@ -523,8 +586,77 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
-            network.training = True
-            logs_valid = source.runner.valid_epoch_UNetFormer_angle(
+
+            logs_valid = source.runner.valid_epoch_UNet_with_angle(
+                model=network,
+                criterion=criterion,
+                metric=metric,
+                dataloader=valid_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+        elif args.network == "unet" and unet_option == "only_angle":
+            logs_train = source.runner.train_epoch_UNet_only_angle(
+                model=network,
+                optimizer=optimizer,
+                criterion=criterion,
+                metric=metric,
+                dataloader=train_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+
+            logs_valid = source.runner.valid_epoch_UNet_only_angle(
+                model=network,
+                criterion=criterion,
+                metric=metric,
+                dataloader=valid_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+        
+        elif args.network == "unetformer" and unetformer_option == "with_angle1" or unetformer_option == "with_angle2":
+            logs_train = source.runner.train_epoch_UNetFormer_with_angle(
+                model=network,
+                optimizer=optimizer,
+                criterion=criterion,
+                metric=metric,
+                dataloader=train_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+            logs_valid = source.runner.valid_epoch_UNetFormer_with_angle(
+                model=network,
+                criterion=criterion,
+                metric=metric,
+                dataloader=valid_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+        
+        elif args.network == "unetformer" and unetformer_option == "only_angle1" or unetformer_option == "only_angle2":
+            logs_train = source.runner.train_epoch_UNetFormer_only_angle(
+                model=network,
+                optimizer=optimizer,
+                criterion=criterion,
+                metric=metric,
+                dataloader=train_loader,
+                device=device,
+                epoch=epoch,
+                figlog_dir=figlog_dir,
+                use_pe=args.use_pe
+            )
+            logs_valid = source.runner.valid_epoch_UNetFormer_only_angle(
                 model=network,
                 criterion=criterion,
                 metric=metric,
@@ -548,9 +680,6 @@ else:
                 figlog_dir=figlog_dir,
                 use_pe=args.use_pe
             )
-
-            #network.training = True 
-            
             logs_valid = source.runner.valid_epoch_UNetFormer(
                 model=network,
                 criterion=criterion,
@@ -594,10 +723,10 @@ else:
             torch.save(network.state_dict(), os.path.join(netout_dir, f"{network_fout}_epoch{epoch}.pth"))
             print("Model saved!")
 
-        if args.log_plt and epoch % 20 == 0 and epoch != 0:
-           learning_rate *= 1e-1
-           optimizer.param_groups[0]["lr"] = learning_rate
-           print("Decrease decoder learning rate to {}".format(learning_rate))
+        #if args.log_plt and epoch % 20 == 0 and epoch != 0:
+           #learning_rate *= 1e-1
+           #optimizer.param_groups[0]["lr"] = learning_rate
+           #print("Decrease decoder learning rate to {}".format(learning_rate))
 
     print(f"Completed: {(time.time() - start)/60.0:.4f} min.")
 

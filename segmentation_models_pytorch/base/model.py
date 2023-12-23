@@ -12,6 +12,8 @@ class SegmentationModel(torch.nn.Module):
     def initialize(self):
         init.initialize_decoder(self.decoder)
         init.initialize_head(self.segmentation_head)
+        if self.decoder_dir is not None:
+            init.initialize_head(self.decoder_dir)
         if self.classification_head is not None:
             init.initialize_head(self.classification_head)
 
@@ -40,6 +42,26 @@ class SegmentationModel(torch.nn.Module):
                 print(feature.shape, glcm_features[i].shape)
                 new_features[i] = feature + glcm_features[i].resize(feature.shape)
             decoder_output = self.decoder(*new_features)
+        elif self.usage == "only_angle":
+            input_feature = features[-1]
+            if input_feature.shape[-1] == 16:
+                input_feature = torch.nn.MaxPool2d(kernel_size=4, stride=4)(input_feature)
+            else:
+                input_feature = torch.nn.MaxPool2d(kernel_size=8, stride=8)(input_feature)
+            input_feature = input_feature.view(input_feature.shape[0], -1)
+            decoder_output = self.decoder_dir(input_feature)
+            #for i, dec in enumerate(decoder_output):
+                #print(i, dec, math.tanh(dec))
+            return decoder_output
+        elif self.usage == "with_angle":
+            input_feature = features[-1]
+            if input_feature.shape[-1] == 16:
+                input_feature = torch.nn.MaxPool2d(kernel_size=4, stride=4)(input_feature)
+            else:
+                input_feature = torch.nn.MaxPool2d(kernel_size=8, stride=8)(input_feature)
+            input_feature = input_feature.view(input_feature.shape[0], -1)
+            estimated_angle = self.decoder_dir(input_feature)
+            decoder_output = self.decoder(*features)
         else:
             decoder_output = self.decoder(*features)
 
@@ -48,6 +70,9 @@ class SegmentationModel(torch.nn.Module):
         if self.classification_head is not None:
             labels = self.classification_head(features[-1])
             return masks, labels
+
+        if self.usage == "with_angle":
+            return masks, estimated_angle
 
         return masks
 

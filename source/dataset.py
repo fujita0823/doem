@@ -6,6 +6,7 @@ from torchvision.transforms import functional as F
 from . import transforms as T
 from pathlib import Path
 from PIL import Image
+import random
 
 
 def load_multiband(path, factor=1.0):
@@ -64,19 +65,28 @@ class Dataset(BaseDataset):
 
         if img.shape[-1] == 1:
             img = np.repeat(img, 3, axis=-1)
-        
-        if self.rotate != 0:
-            print("Use rotating ")
+
+        if self.rotate == 0:
+            c_angle = self.angles[idx] 
+        elif self.rotate != 0:
+            random_angle = random.uniform(-180., 180.)
+            c_angle = self.angles[idx] + random_angle
+            if c_angle>180:
+                c_angle = c_angle - 360
+            elif c_angle<-180:
+                c_angle = c_angle + 360
+            
+            img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * c_angle)
+            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * c_angle)
             #Image.fromarray(img[:,:,0], "L").save("./tmp/imgo_"+str(idx)+'.png')
-            img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * self.angles[idx])
-            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * self.angles[idx])
             img = np.array(img)
             msk = np.array(msk)
             #Image.fromarray(img[:,:,0], "L").save("./tmp/imgr_"+str(idx)+'.png')
         
 
         if self.train:
-            data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
+            #data = self.augm({"image": img, "mask": msk}, self.size, self.angles[idx])
+            data = self.augm({"image": img, "mask": msk}, self.size, c_angle)
         else:
             data = self.augm({"image": img, "mask": msk}, 1024)
         data = self.to_tensor(data)
@@ -85,7 +95,7 @@ class Dataset(BaseDataset):
             output = img[:,:,0]
             Image.fromarray(output, "L").save("./tmp/rotated_"+str(idx)+'.png') 
 
-        return {"x": data["image"], "y": data["mask"], "fn": self.fns[idx], "angle": self.angles[idx]}
+        return {"x": data["image"], "y": data["mask"], "fn": self.fns[idx], "angle": c_angle}
 
     def __len__(self):
         return len(self.fns)

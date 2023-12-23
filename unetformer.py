@@ -206,9 +206,6 @@ class GlobalLocalAttention(nn.Module):
             kernel_size=(1, window_size), stride=1, padding=(0, window_size // 2 - 1)
         )
 
-        ####################################################
-        ### relative position embedding for local window ###
-        ####################################################
         self.relative_pos_embedding = relative_pos_embedding
 
         if self.relative_pos_embedding:
@@ -421,33 +418,32 @@ class AuxHead(nn.Module):
         self.conv = ConvBNReLU(in_channels, in_channels)
         self.drop = nn.Dropout(0.1)
         self.conv_out = Conv(in_channels, num_classes, kernel_size=1)
-        if estimate_angle or True:
-            self.estimate_angle = True
+        self.estimate_angle = estimate_angle
+        if estimate_angle:
             self.estimate_angle_layer = nn.Sequential(
                 nn.Linear(in_channels*in_channels*num_classes, in_channels*16),
+                nn.BatchNorm1d(in_channels*16),
                 nn.Tanh(),
-                nn.Dropout(0.5),
+                nn.Dropout(0.2),
                 nn.Linear(in_channels*16, in_channels),
+                nn.BatchNorm1d(in_channels),
+                nn.Dropout(0.2),
                 nn.Tanh(),
-                nn.Dropout(0.5),
                 nn.Linear(in_channels, 2),
                 nn.Tanh()
             )
+
 
     def forward(self, x, h, w):
         feat = self.conv(x)
         feat = self.drop(feat)
         feat = self.conv_out(feat)
-        if self.estimate_angle or True:
-            #print(f"feat.shape: {feat.shape}")
-            #print(f"feat.shape: {feat.flatten(start_dim=2).shape}")
+        if self.estimate_angle:
             if feat.shape[-1] == 128:
                 angle_feat = F.interpolate(feat, size=(64,64), mode='bilinear', align_corners=False).flatten(start_dim=1)
             else:
                 angle_feat = feat.flatten(start_dim=1)
             est_angle = self.estimate_angle_layer(angle_feat)
-            #print(f"est_angle.shape: {est_angle.shape}")
-            #print(f"est_angle: {est_angle}")
             feat = F.interpolate(feat, size=(h, w), mode='bilinear', align_corners=False)
             return feat, est_angle
         else:
@@ -462,6 +458,7 @@ class Decoder(nn.Module):
         dropout=0.1,
         window_size=8,
         num_classes=6,
+        angle=None,
     ):
         super(Decoder, self).__init__()
 
@@ -474,10 +471,15 @@ class Decoder(nn.Module):
         self.b2 = Block(dim=decode_channels, num_heads=8, window_size=window_size)
         self.p2 = WF(encoder_channels[-3], decode_channels)
 
+        self.angle1 = angle if angle is not None else False
+
         if self.training:
             self.up4 = nn.UpsamplingBilinear2d(scale_factor=4)
             self.up3 = nn.UpsamplingBilinear2d(scale_factor=2)
-            self.aux_head = AuxHead(decode_channels, num_classes)
+            if self.angle1:
+                self.aux_head = AuxHead(decode_channels, num_classes, estimate_angle=True)
+            else:
+                self.aux_head = AuxHead(decode_channels, num_classes, estimate_angle=False)
 
         self.p1 = FeatureRefinementHead(encoder_channels[-4], decode_channels)
 
@@ -489,7 +491,7 @@ class Decoder(nn.Module):
         self.init_weight()
 
     def forward(self, res1, res2, res3, res4, h, w):
-        if self.training or True:
+        if self.training:
             x = self.b4(self.pre_conv(res4))
             h4 = self.up4(x)
             x = self.p3(x, res3)
@@ -502,8 +504,12 @@ class Decoder(nn.Module):
             x = self.segmentation_head(x)
             x = F.interpolate(x, size=(h, w), mode="bilinear", align_corners=False)
             ah = h4+h3+h2
-            ah, ea = self.aux_head(ah, h, w)
-            return x, ah, ea
+            if self.angle1:
+                ah, ea = self.aux_head(ah, h, w)
+                return x, ah, ea
+            else:
+                ah = self.aux_head(ah, h, w)
+                return x, ah
         else:
             x = self.b4(self.pre_conv(res4))
             x = self.p3(x, res3)
@@ -522,6 +528,49 @@ class Decoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
+
+class DirDecoder(nn.Module):
+    def __init__(self):
+        super(DirDecoder, self).__init__()
+        self.dir_head = nn.Sequential(
+            nn.Linear(512*16, 64*64),
+            #nn.BatchNorm1d(64*64),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(64*64, 128),
+            #nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 1),
+            nn.Tanh()
+        )
+        self.init_weight_rec(self)
+    
+    def forward(self, res1, res2, res3, res4, h, w):
+        if res4.size()[3] != 16:
+            res4 = nn.MaxPool2d(kernel_size=8, stride=8)(res4)
+        else:
+            res4 = nn.MaxPool2d(kernel_size=4, stride=4)(res4)
+        input = res4.flatten(start_dim=1)
+        output = self.dir_head(input)
+        return output
+    
+    def init_weight(self):
+        for m in self.children():
+            if isinstance(m, nn.Conv2d or nn.Linear):
+                nn.init.kaiming_normal_(m.weight, a=1)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    def init_weight_rec(self, m):
+        if hasattr(m, "children") and len(list(m.children())) > 0:
+            for c in m.children():
+                self.init_weight_rec(c)
+        elif isinstance(m, nn.Conv2d or m.Linear):
+            print("init conv", m)
+            nn.init.kaiming_normal_(m.weight, a=1)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
 class UNetFormer(nn.Module):
     def __init__(
@@ -560,18 +609,187 @@ class UNetFormer(nn.Module):
         h, w = x.size()[-2:]
         res1, res2, res3, res4 = self.backbone(x)
         if self.training:
-            if True:
-                self.decoder.training = True
-                x, ah, ea = self.decoder(res1, res2, res3, res4, h, w)
-                return x, ah, ea
-            else:
-                x, ah = self.decoder(res1, res2, res3, res4, h, w)
-                return x, ah
+            x, ah = self.decoder(res1, res2, res3, res4, h, w)
+            return x, ah
         else:
+            x = self.decoder(res1, res2, res3, res4, h, w)
+            return x
+
+class UNetFormer_with_angle1(nn.Module):
+    def __init__(
+        self,
+        decode_channels=64,
+        dropout=0.1,
+        backbone_name="swsl_resnet18",
+        pretrained=True,
+        window_size=8,
+        in_channels=3,
+        n_classes=6,
+    ):
+        super().__init__()
+
+        self.backbone = timm.create_model(
+            backbone_name,
+            features_only=True,
+            output_stride=32,
+            out_indices=(1, 2, 3, 4),
+            pretrained=pretrained,
+            in_chans=in_channels,
+        )
+        encoder_channels = self.backbone.feature_info.channels()
+
+        self.decoder = Decoder(
+            encoder_channels,
+            decode_channels,
+            dropout,
+            window_size,
+            n_classes,
+            angle=True
+        )
+        self.name = "UNetFormer-{}".format(backbone_name.replace("_", "-"))
+        self.usage = "segmentation"
+
+    def forward(self, x):
+        h, w = x.size()[-2:]
+        res1, res2, res3, res4 = self.backbone(x)
+        if self.training:
             x, ah, ea = self.decoder(res1, res2, res3, res4, h, w)
             return x, ah, ea
-            #x = self.decoder(res1, res2, res3, res4, h, w)
-            #return x
+        else:
+            # output has only x, but I don't know the reason
+            out = self.decoder(res1, res2, res3, res4, h, w)
+            return out
+
+class UNetFormer_only_angle1(nn.Module):
+    def __init__(
+        self,
+        decode_channels=64,
+        dropout=0.1,
+        backbone_name="swsl_resnet18",
+        pretrained=True,
+        window_size=8,
+        in_channels=3,
+        n_classes=6,
+    ):
+        super().__init__()
+
+        self.backbone = timm.create_model(
+            backbone_name,
+            features_only=True,
+            output_stride=32,
+            out_indices=(1, 2, 3, 4),
+            pretrained=pretrained,
+            in_chans=in_channels,
+        )
+        encoder_channels = self.backbone.feature_info.channels()
+
+        self.decoder = Decoder(
+            encoder_channels,
+            decode_channels,
+            dropout,
+            window_size,
+            n_classes,
+            angle=True
+        )
+        self.decoder.training = True
+        self.name = "UNetFormer-{}".format(backbone_name.replace("_", "-"))
+        self.usage = "segmentation"
+
+    def forward(self, x):
+        h, w = x.size()[-2:]
+        self.decoder.training = True
+        res1, res2, res3, res4 = self.backbone(x)
+        x, ah, ea = self.decoder(res1, res2, res3, res4, h, w)
+        return ea
+
+class UNetFormer_with_angle2(nn.Module):
+    def __init__(
+        self,
+        decode_channels=64,
+        dropout=0.1,
+        backbone_name="swsl_resnet18",
+        pretrained=True,
+        window_size=8,
+        in_channels=3,
+        n_classes=6,
+    ):
+        super().__init__()
+
+        self.backbone = timm.create_model(
+            backbone_name,
+            features_only=True,
+            output_stride=32,
+            out_indices=(1, 2, 3, 4),
+            pretrained=pretrained,
+            in_chans=in_channels,
+        )
+        encoder_channels = self.backbone.feature_info.channels()
+
+        self.decoder = Decoder(
+            encoder_channels,
+            decode_channels,
+            dropout,
+            window_size,
+            n_classes,
+        )
+
+        self.dir_decoder = DirDecoder()
+        self.name = "UNetFormer-{}".format(backbone_name.replace("_", "-"))
+        self.usage = "segmentation"
+
+    def forward(self, x):
+        h, w = x.size()[-2:]
+        res1, res2, res3, res4 = self.backbone(x)
+        if self.training:
+            x, ah = self.decoder(res1, res2, res3, res4, h, w)
+            di = self.dir_decoder(res1, res2, res3, res4, h, w)
+            return x, ah, di
+        else:
+            x = self.decoder(res1, res2, res3, res4, h, w)
+            return x
+
+
+
+class UNetFormer_only_angle2(nn.Module):
+    def __init__(
+        self,
+        decode_channels=64,
+        dropout=0.1,
+        backbone_name="swsl_resnet18",
+        pretrained=True,
+        window_size=8,
+        in_channels=3,
+        n_classes=6,
+    ):
+        super().__init__()
+
+        self.backbone = timm.create_model(
+            backbone_name,
+            features_only=True,
+            output_stride=32,
+            out_indices=(1, 2, 3, 4),
+            pretrained=pretrained,
+            in_chans=in_channels,
+        )
+        encoder_channels = self.backbone.feature_info.channels()
+
+        self.decoder = Decoder(
+            encoder_channels,
+            decode_channels,
+            dropout,
+            window_size,
+            n_classes,
+        )
+
+        self.dir_decoder = DirDecoder()
+        self.name = "UNetFormer-{}".format(backbone_name.replace("_", "-"))
+        self.usage = "segmentation"
+
+    def forward(self, x):
+        h, w = x.size()[-2:]
+        res1, res2, res3, res4 = self.backbone(x)
+        di = self.dir_decoder(res1, res2, res3, res4, h, w)
+        return di
 
 class PositionalEncoder(nn.Module):
     def __init__(self, num, dim):

@@ -67,6 +67,20 @@ class JointLoss(nn.Module):
     def forward(self, input, target):
         loss = self.w1 * self.loss1(input, target) + self.w2 * self.loss2(input, target)
         return loss
+    
+class UnetLoss_with_angle(nn.Module):
+    def __init__(self, weights, device="cuda", angle_training_only=False):
+        super().__init__()
+        self.weight = torch.from_numpy(weights).float().to(device)
+        self.main_loss = CEWithLogitsLoss(weights, device)
+        self.agl_loss = AngleLoss()
+        self.name = "UnetLoss_with_angle"
+    
+    def forward(self, input, target, angle_target=None):
+        main_loss = self.main_loss(input[0], target)
+        agl_loss = self.agl_loss(input[1], angle_target)
+        loss = main_loss + 0.5 * agl_loss
+        return loss
 
 
 class UnetFormerLoss(nn.Module):
@@ -79,27 +93,41 @@ class UnetFormerLoss(nn.Module):
         self.aux_loss = CEWithLogitsLoss(weights, device)
         self.name = "UnetFormerLoss"
         self.training = True
-        self.angle_training_only = angle_training_only
     
-    def angle_loss(self, input, target):
-        # input: [-1,1], shape [4,2], coordinates
-        # target: [0,360], shape [4], angle
-        target = target.float() * (math.pi/180.0)
-        target = torch.cat((torch.cos(target).unsqueeze(1),torch.sin(target).unsqueeze(1)), dim=1)
-        loss =  torch.nn.MSELoss()(input, target)
-        return loss
-
     def forward(self, input, target, angle_target=None):
-        ## if input.shape == (3, 4, 9, 1024, 1024), training
-        ## if input.shape == (4, 9, 1024, 1024), inference
-        if self.angle_training_only:
-            return self.angle_loss(input[2], angle_target)
         if self.training:
             main_loss = self.main_loss(input[0], target)
             aux_loss = self.aux_loss(input[1], target)
-            agl_loss = self.angle_loss(input[2], angle_target)
-            #print(f"main_loss: {main_loss}, aux_loss: {aux_loss}, agl_loss: {agl_loss}")
-            loss = main_loss +  0.4 * aux_loss + agl_loss
+            loss = main_loss +  0.4 * aux_loss
+        else:
+            loss = self.main_loss(input, target)
+        return loss
+
+class UnetFormerLoss_with_angle(nn.Module):
+    def __init__(self, weights, device="cuda", angle_training_only=False):
+        super().__init__()
+        self.weight = torch.from_numpy(weights).float().to(device)
+        self.main_loss = JointLoss(CEWithLogitsLoss(weights, device), DiceLoss(), 1.0, 1.0)
+        self.aux_loss = CEWithLogitsLoss(weights, device)
+        self.agl_loss = AngleLoss()
+        self.name = "UnetFormerLoss"
+        self.training = True
+    
+    def forward(self, input, target, angle_target=None):
+        ## if input.shape == (3, 4, 9, 1024, 1024), training
+        ## if input.shape == (4, 9, 1024, 1024), inference
+        if self.training:
+            if len(input) == 3:
+                main_loss = self.main_loss(input[0], target)
+                aux_loss = self.aux_loss(input[1], target)
+                agl_loss = self.agl_loss(input[2], angle_target)
+                loss = main_loss +  0.4 * aux_loss + agl_loss
+            elif len(input) == 2:
+                main_loss = self.main_loss(input[0], target)
+                agl_loss = self.agl_loss(input[1], angle_target)
+                loss = main_loss + agl_loss
+            else:
+                raise ValueError(f"input shape is not correct, got {input.shape}")
         else:
             loss = self.main_loss(input, target)
         return loss
@@ -112,17 +140,18 @@ class AngleLoss(nn.Module):
     def forward(self, input, target):
         # input: [-1,1], shape [4,2], coordinates
         # target: [0,360], shape [4], angle
-        target = target.float() * (math.pi/180.0)
-        target = torch.cat((torch.cos(target).unsqueeze(1),torch.sin(target).unsqueeze(1)), dim=1)
-        dot = torch.sum(input[2] * target, dim=1)
+        target = (target.float() * (math.pi/181.0)).unsqueeze(1)
+        target = torch.cat((torch.cos(target),torch.sin(target)), dim=1)
+        #vector = input.float() * math.pi
+        #vector = torch.cat((torch.cos(vector),torch.sin(vector)), dim=1)
+        # calculate the norm of the vectors
+        vector = input.float()
+        vector = vector / torch.norm(vector, dim=1).unsqueeze(1)
+        #vector = input.float()
+        dot = torch.sum(vector * target, dim=1)
         acos_loss = torch.acos(dot.clamp(-1+1e-6, 1-1e-6)).mean(dim=0)
-        #loss =  torch.nn.MSELoss()(input[2], target)
         return acos_loss
     
-    #def opt(self, input, target):
-        #target = target.float() * (math.pi/180.0)
-        #target = torch.cat((torch.cos(target).unsqueeze(1),torch.sin(target).unsqueeze(1)), dim=1)
-        #return acos_loss
     
 class SoftCrossEntropyLoss(nn.Module):
     """

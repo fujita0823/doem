@@ -76,8 +76,8 @@ class Dataset(BaseDataset):
             elif c_angle<-180:
                 c_angle = c_angle + 360
             
-            img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * c_angle)
-            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * c_angle)
+            img = F.rotate(Image.fromarray(img.astype('uint8')), self.rotate * random_angle)
+            msk = F.rotate(Image.fromarray(msk.astype('uint8')), self.rotate * random_angle)
             #Image.fromarray(img[:,:,0], "L").save("./tmp/imgo_"+str(idx)+'.png')
             img = np.array(img)
             msk = np.array(msk)

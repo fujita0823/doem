@@ -31,6 +31,7 @@ parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--n_epochs", type=int, default=300)
 parser.add_argument("--test_mode", action="store_true")
+parser.add_argument("--angle_test", action="store_true")
 parser.add_argument("--train_city", type=str, default='all')
 parser.add_argument("--img_factor", type=float, default=1.0)
 parser.add_argument("--large_test",type=str,default=None)
@@ -513,6 +514,111 @@ if test_mode == True:
     end = time.time()
     print('Processing time:',end - start)
 
+elif args.test_mode == False and args.angle_test == True:
+    start = time.time()
+    figdir = os.path.join(outdir, "fig", network_fout)
+    os.makedirs(os.path.join(outdir, "fig"), exist_ok=True)
+    os.makedirs(figdir, exist_ok=True)
+    subdir = os.path.join(outdir,"codalab",network_fout)
+    os.makedirs(os.path.join(outdir, "codalabe"), exist_ok=True)
+    os.makedirs(subdir, exist_ok=True)
+
+    if os.path.exists(figdir) == False:
+        os.makedirs(figdir)
+    if os.path.exists(subdir) == False:
+        os.makedirs(subdir)
+    # header 
+    body = []
+
+    # load network
+    pretrained_models = glob.glob(netout_dir + "/" + network_fout + "_epoch*.pth")
+    if len(pretrained_models) > 0:
+        max_num, name = 0, None
+        for pretrained_model in pretrained_models:
+            num = int(pretrained_model.split("_")[-1].split(".")[0].replace("epoch", ""))
+            if num>=max_num:
+                max_num, name = num, pretrained_model
+        if name is not None:
+            print("Loading pretrained model:", name)
+            load_path = os.path.join(netout_dir, f"{network_fout}_epoch{num}.pth")
+        else:
+            load_path = os.path.join(netout_dir, f"{network_fout}_epoch{n_epochs-1}.pth")
+            print("No pretrained model found")
+    else:
+        load_path = os.path.join(netout_dir, f"{network_fout}_epoch{n_epochs-1}.pth")
+        print("No pretrained model found")
+    #load_path = os.path.join(netout_dir, "u-efficientnet-b4_s0_CELoss_capella_s0_0000_epoch15.pth")
+    network.load_state_dict(torch.load(load_path))
+    network.to(device).eval()
+    
+    # evaluation over all folders
+    
+    csvfile = os.path.join(csv_dir,f"{network_fout}.csv")
+    ious_all = []
+    city_angles = { "saitama1":130, "chiba1":-170, "tokyo1":-10, "tokyo2":-10, "tokyo3":15}
+    for k in range(len(cities)):
+        city = cities[k]
+        correct_angle = city_angles[city]
+        test_pths_tmp = []
+        for pth_tmp in test_pths:
+            if city in pth_tmp:
+                test_pths_tmp.append(pth_tmp)
+        # dataset
+        testset = source.dataset.Dataset(test_pths_tmp, classes=classes, train=False)
+        loss_s = 0
+
+        for fn_img in tqdm(test_pths_tmp, desc=city): 
+            data = [city]
+            y_gt = source.dataset.load_grayscale(fn_img)
+            img = source.dataset.load_multiband(str(fn_img).replace("/labels/","/images/"))
+
+            if img.shape[-1] == 1:
+                img = np.repeat(img, 3, axis=-1)  # Convert grayscale to RGB
+
+            h, w = img.shape[:2]
+            power = math.ceil(np.log2(h) / np.log2(2))
+            shape = (2 ** power, 2 ** power)
+            img = cv2.resize(img, shape)
+
+            imgs = []
+            imgs.append(img.copy())
+            imgs.append(img[:, ::-1, :].copy())
+            imgs.append(img[::-1, :, :].copy())
+            imgs.append(img[::-1, ::-1, :].copy())
+
+            input = torch.cat([TF.to_tensor(x).unsqueeze(0) for x in imgs], dim=0).float().to(device)
+
+            pred = []
+            with torch.no_grad():
+                vectors = network(input).cpu().numpy()
+                vec = (vectors[0] + vectors[1] + vectors[2] + vectors[3])/4
+                print(vectors)
+                if vec[0] != vectors[0][0] or vec[1] != vectors[0][1]:
+                    print("Warning: angles are not same")
+                vec_n = vec / np.linalg.norm(vec)
+                angle = np.arccos(vec_n[0]) * 180 / np.pi 
+                loss = abs(angle - correct_angle)
+                loss_s += loss
+
+            # save image as png
+            filename = os.path.splitext(os.path.basename(fn_img))[0]
+            data.append(filename)
+            data.append(angle)
+            data.append(correct_angle)
+            data.append(loss)
+            body.append(data)
+        
+        print(loss_s, loss_s/len(test_pths_tmp))
+
+    # save in csv 
+    with open(csvfile, 'w') as f: 
+        writer = csv.writer(f)
+        writer.writerows(body)
+    f.close()
+
+    end = time.time()
+    print('Processing time:',end - start)
+    
 else:
 # ------------------------
 # --- Network training ---
@@ -539,12 +645,13 @@ else:
     else:
         figlog_dir = None    
 
-    if False:
+    if True:
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch29.pth"
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r1_epoch32.pth"
+        train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch61.pth"
         loaded = torch.load(train_path)
         network.load_state_dict(loaded)
-        base_epoch = 22
+        base_epoch = 61
     else:
         base_epoch = -1
 

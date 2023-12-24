@@ -544,6 +544,10 @@ def valid_epoch_UNetFormer_only_angle(
 
             with torch.no_grad():
                 outputs = model.forward(x)
+                vec_n = outputs/outputs.norm(dim=1, keepdim=True)
+                ang = torch.acos(vec_n[:,0]).cpu().detach().numpy()
+                ang = ang * 180.0 / math.pi
+                print(f"ang: {ang}, a: {a.cpu().detach().numpy()}")
                 loss = criterion(outputs, a)
 
             loss_meter.update(loss.cpu().detach().numpy(), n=n)

@@ -591,13 +591,19 @@ elif args.test_mode == False and args.angle_test == True:
             pred = []
             with torch.no_grad():
                 vectors = network(input).cpu().numpy()
-                vec = (vectors[0] + vectors[1] + vectors[2] + vectors[3])/4
-                print(vectors)
+                #vec = (vectors[0] + vectors[1] + vectors[2] + vectors[3])/4
+                vec = vectors[0]
+                #print(vectors)
                 if vec[0] != vectors[0][0] or vec[1] != vectors[0][1]:
                     print("Warning: angles are not same")
                 vec_n = vec / np.linalg.norm(vec)
-                angle = np.arccos(vec_n[0]) * 180 / np.pi 
-                loss = abs(angle - correct_angle)
+                #angle = np.arccos(vec_n[0]) * 180 / np.pi 
+                angle = np.arctan2(vec_n[1], vec_n[0]) * 180 / np.pi
+                loss = angle - correct_angle
+                if loss > 180:
+                    loss = (360 - loss)
+                elif loss < -180:
+                    loss = (360 + loss)
                 loss_s += loss
 
             # save image as png
@@ -648,7 +654,7 @@ else:
     if True:
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch29.pth"
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r1_epoch32.pth"
-        train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch61.pth"
+        train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch71.pth"
         loaded = torch.load(train_path)
         network.load_state_dict(loaded)
         base_epoch = 61

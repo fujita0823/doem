@@ -605,9 +605,15 @@ class UNetFormer(nn.Module):
         self.name = "UNetFormer-{}".format(backbone_name.replace("_", "-"))
         self.usage = "segmentation"
 
-    def forward(self, x):
+    def forward(self, x, a=None):
         h, w = x.size()[-2:]
         res1, res2, res3, res4 = self.backbone(x)
+        if True:
+            self.pe = PositionalEncoder(a, dim=512)
+            res1 = self.pe(res1)
+            res2 = self.pe(res2)
+            res3 = self.pe(res3)
+            res4 = self.pe(res4)
         if self.training:
             x, ah = self.decoder(res1, res2, res3, res4, h, w)
             return x, ah
@@ -792,19 +798,31 @@ class UNetFormer_only_angle2(nn.Module):
         return di
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, num, dim):
+    def __init__(self, angles, dim=256):
         super().__init__()
         self.dim = dim
 
-        pe = torch.zeros(num, dim)
-        for pos in range(num):
+        pe = torch.zeros(len(angles), dim)
+        #for pos in range(num):
+        for j, pos in enumerate(angles):
+            pos = pos * math.pi / 180
+            _th = pos
             for i in range(0, dim, 2):
-                pe[pos, i] = math.sin(pos/(10000**(((2*i)/dim))))
-                pe[pos, i+1] = math.cos(pos/(10000**(((2*(i+1))/dim))))
-        pe = pe.unsqueeze(0)
+                al_th = _th - math.floor(_th)
+                in_th = math.floor(_th)%2
+                theta = (al_th + in_th) * math.pi
+                pe[j][i] = math.sin(theta)
+                pe[j][i+1] = math.cos(theta)
+                _th = 2*theta
+                #pe[pos, i] = math.sin(pos/(10000**(((2*i)/dim))))
+                #pe[pos, i+1] = math.cos(pos/(10000**(((2*(i+1))/dim))))
+        self._pe = pe
 
     def forward(self, data):
-        data = data*math.sqrt(self.dim)
-        seq_len = data.size(1)
-        data = data + torch.tensor(self.pe[:,:seq_len], requires_grad=False)
+        #data = data*math.sqrt(self.dim)
+        #seq_len = data.size(1)
+        #data = data + torch.tensor(self.pe[:,:seq_len], requires_grad=False)
+        #return data
+        self._pe = self._pe.to(data.device)
+        data = data + self._pe[:,:data.size(1)].unsqueeze(-1).unsqueeze(-1)
         return data

@@ -67,7 +67,7 @@ test_mode = args.test_mode
 train_city = args.train_city
 large_test = args.large_test
 label_ver = args.label_ver
-date = "1217"
+date = "1227"
 
 # 1: bareland
 # 2: grass
@@ -427,6 +427,9 @@ if test_mode == True:
         
             y_gt = source.dataset.load_grayscale(fn_img)
             img = source.dataset.load_multiband(str(fn_img).replace("/labels/","/images/"))
+            if True:
+                city_angles = { "saitama1":130, "chiba1":-170, "tokyo1":-10, "tokyo2":-10, "tokyo3":15}
+                angle = [city_angles[city]]
 
             if img.shape[-1] == 1:
                 img = np.repeat(img, 3, axis=-1)  # Convert grayscale to RGB
@@ -446,7 +449,8 @@ if test_mode == True:
 
             pred = []
             with torch.no_grad():
-                msk = network(input) 
+                #msk = network(input) 
+                msk = network(input, angle) 
                 if unet_option == "with_angle":
                     msk = msk[0]
                 msk = torch.softmax(msk[:, :, ...], dim=1)
@@ -567,6 +571,7 @@ elif args.test_mode == False and args.angle_test == True:
         testset = source.dataset.Dataset(test_pths_tmp, classes=classes, train=False)
         loss_s = 0
 
+        """
         for fn_img in tqdm(test_pths_tmp, desc=city): 
             data = [city]
             y_gt = source.dataset.load_grayscale(fn_img)
@@ -615,6 +620,16 @@ elif args.test_mode == False and args.angle_test == True:
             body.append(data)
         
         print(loss_s, loss_s/len(test_pths_tmp))
+        """
+
+        for data in tqdm(testset):
+            y_gt = data["y"]
+            img = data["x"]
+
+            if img.shape[-1] == 1:
+                img = np.repeat(img, 3, axis=-1)  # Convert grayscale to RGB
+            
+
 
     # save in csv 
     with open(csvfile, 'w') as f: 
@@ -655,9 +670,10 @@ else:
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch29.pth"
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r1_epoch32.pth"
         train_path="results/trained/UNetFormer-swsl-resnet18_s0_AngleLoss_capella_only_angle1_s0_1217_f1_r0_epoch71.pth"
+        train_path="results/trained/UNetFormer-swsl-resnet18_s1011_UnetFormerLoss_capella_none_s1011_1227_f1_r0_epoch89.pth"
         loaded = torch.load(train_path)
         network.load_state_dict(loaded)
-        base_epoch = 61
+        base_epoch = 89
     else:
         base_epoch = -1
 

@@ -70,6 +70,7 @@ class Dataset(BaseDataset):
             c_angle = self.angles[idx] 
         elif self.rotate != 0:
             random_angle = random.uniform(-180., 180.)
+            random_angle = float((-self.angles[idx]  + (idx % 5) * 50) % 360)
             c_angle = self.angles[idx] + random_angle
             if c_angle>180:
                 c_angle = c_angle - 360

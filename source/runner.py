@@ -320,7 +320,7 @@ def train_epoch_UNetFormer(
             n = x.shape[0]
 
             optimizer.zero_grad()
-            outputs = model.forward(x)
+            outputs = model.forward(x, sample["angle"].to(device))
             criterion.training = True
             loss = criterion(outputs, y)
             loss.backward()
@@ -362,7 +362,7 @@ def valid_epoch_UNetFormer(
             n = x.shape[0]
 
             with torch.no_grad():
-                outputs = model.forward(x)
+                outputs = model.forward(x, sample["angle"].to(device))
                 criterion.training = False
                 loss = criterion(outputs, y)
 
